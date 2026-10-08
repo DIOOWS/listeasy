@@ -1,6 +1,6 @@
 # EASY Serviços — Flask + Supabase + Render + PWA
 
-Versão 1.0. A logo Easy Assistência 24h enviada foi aplicada ao cabeçalho, à impressão, ao favicon e aos ícones do PWA, preservando as proporções. Projeto independente para controlar os veículos dos clientes e os serviços executados. Interface simples, responsiva e instalável no celular.
+Versão 1.2. Pacote de publicação com validação das variáveis antes de iniciar, `start.sh`, versão Python definida e guia `PUBLICAR.md`. Correção do prazo do CSRF e inclusão de fusos horários para Windows. A logo Easy Assistência 24h enviada foi aplicada ao cabeçalho, à impressão, ao favicon e aos ícones do PWA, preservando as proporções. Projeto independente para controlar os veículos dos clientes e os serviços executados. Interface simples, responsiva e instalável no celular.
 
 ## O que esta versão faz
 
@@ -60,6 +60,16 @@ Abra http://127.0.0.1:5000. Login: o usuário e a senha que você definiu. Os da
 
 Linux/macOS: use `python3 -m venv .venv`, `.venv/bin/python -m pip install -r requirements.lock.txt`, `cp .env.example .env` e `.venv/bin/python bootstrap.py`.
 
+### Se você tem Python 3.10 no Windows
+
+Use `py -3.10 -m venv .venv` e instale com `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`, para resolver versões compatíveis. O arquivo `requirements.lock.txt` foi verificado no Python 3.12.
+
+### Atualizar a versão 1.0
+
+Pare o servidor com Ctrl+C. Copie `easy/__init__.py` da versão 1.1 sobre o arquivo de mesmo nome da sua instalação. O pacote também inclui `tzdata` nos requisitos para os fusos horários do Windows. Preserve seu `.env` e a pasta `instance` com o banco.
+
+Se a inicialização anterior avisou que faltam os dados do administrador, preencha `ADMIN_USERNAME`, `ADMIN_NAME` e `ADMIN_PASSWORD` no `.env` e execute `python bootstrap.py` novamente antes de iniciar o Flask. A senha precisa ter 12–128 caracteres. O sistema só cria o primeiro administrador e não redefine usuários existentes.
+
 ## Supabase para produção
 
 1. Crie um projeto para este sistema. O aplicativo usa o PostgreSQL do Supabase diretamente, pelo servidor Flask; não usa chaves anon ou service_role no navegador.
@@ -97,7 +107,7 @@ Você pode usar **New → Blueprint** com o `render.yaml`, ou criar um **Web Ser
 Configuração manual:
 
 - Build Command: `pip install -r requirements.lock.txt`
-- Start Command: `python bootstrap.py && gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 90 --access-logfile - --error-logfile -`
+- Start Command: `bash start.sh`
 - Health Check Path: `/health`
 - Python: `3.12.12`
 
@@ -169,5 +179,3 @@ Também foram verificadas as migrações em um banco local novo e a geração SQ
 - Novas mudanças de estrutura devem virar migrações versionadas. Não rode `db.create_all()` em produção.
 - Ao alterar os arquivos públicos do PWA, incremente o nome `CACHE` em `easy/static/sw.js`.
 - Offline com sincronização, assinatura digital, estoque, aprovação pelo cliente e financeiro de recebimentos são evoluções futuras; não estão implementados.
-#   l i s t e a s y  
- 

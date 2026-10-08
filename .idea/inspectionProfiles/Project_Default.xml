@@ -1,0 +1,29 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="gunicorn" />
+          <option value="python-dotenv" />
+          <option value="dj-database-url" />
+          <option value="psycopg2-binary" />
+          <option value="cloudinary" />
+          <option value="pandas" />
+          <option value="openpyxl" />
+          <option value="xlrd" />
+          <option value="pyxlsb" />
+          <option value="lxml" />
+          <option value="html5lib" />
+          <option value="beautifulsoup4" />
+          <option value="pillow" />
+          <option value="reportlab" />
+          <option value="openai" />
+          <option value="Flask" />
+          <option value="Flask-Migrate" />
+          <option value="Flask-SQLAlchemy" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
