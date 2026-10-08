@@ -17,3 +17,12 @@ window.addEventListener('appinstalled',()=>{if(installButton)installButton.hidde
 if(installStatus&&window.matchMedia('(display-mode: standalone)').matches)installStatus.textContent='Você já está usando o aplicativo instalado.';
 
 document.querySelectorAll('form[method="post"]').forEach(form=>form.addEventListener('submit',event=>{if(navigator.onLine===false){event.preventDefault();window.alert('Sem conexão. Conecte o celular à internet e toque em Salvar novamente. As alterações deste formulário ainda não foram enviadas.');}}));
+
+// Menu mobile nativo: foco, Escape e retorno ao botão tratados pelo dialog.
+const appMenu=document.getElementById('app-menu');
+if(appMenu){
+ document.querySelectorAll('[data-open-menu]').forEach(button=>button.addEventListener('click',()=>{if(!appMenu.open)appMenu.showModal();}));
+ appMenu.querySelector('[data-close-menu]').addEventListener('click',()=>appMenu.close());
+ appMenu.addEventListener('click',event=>{if(event.target===appMenu){const box=appMenu.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)appMenu.close();}});
+ appMenu.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>appMenu.close()));
+}
