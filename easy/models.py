@@ -66,6 +66,11 @@ class Order(db.Model):
     entry_date = db.Column(db.Date, nullable=False, index=True)
     due_date = db.Column(db.Date, nullable=False, index=True)
     delivered_date = db.Column(db.Date)
+    approved_date = db.Column(db.Date)
+    started_date = db.Column(db.Date)
+    ready_date = db.Column(db.Date)
+    invoiced_date = db.Column(db.Date)
+    received_date = db.Column(db.Date)
     mileage = db.Column(db.Integer, nullable=False, default=0)
     status = db.Column(db.String(40), nullable=False, default=STATUSES[0], index=True)
     responsible = db.Column(db.String(120), nullable=False)
@@ -96,6 +101,47 @@ class Order(db.Model):
     def service_progress(self):
         services = [x for x in self.items if x.kind == 'servico']
         return round(100 * sum(x.done for x in services) / len(services)) if services else 0
+
+    @property
+    def flow_steps(self):
+        # Existing OS keep their known status; missing historical dates stay unknown.
+        service_done = bool(self.started_date) or self.status in ['Pronto para entrega', 'Entregue']
+        ready_done = self.status in ['Pronto para entrega', 'Entregue']
+        steps = [
+            ('Entrada', self.entry_date, True),
+            ('Aprovação', self.approved_date, bool(self.approved_date)),
+            ('Em serviço', self.started_date, service_done),
+            ('Pronto', self.ready_date, ready_done),
+            ('Entregue', self.delivered_date, self.status == 'Entregue'),
+            ('Faturado', self.invoiced_date, bool(self.invoiced_date)),
+            ('Recebido', self.received_date, bool(self.received_date)),
+        ]
+        if self.status == 'Cancelada' or self.received_date:
+            current = None
+        elif self.invoiced_date:
+            current = 6
+        elif self.status == 'Entregue':
+            current = 5
+        elif self.status == 'Pronto para entrega':
+            current = 3
+        elif self.status in ['Em serviço', 'Aguardando peças']:
+            current = 2
+        elif self.approved_date:
+            current = 2
+        else:
+            current = 1
+        return [dict(label=label, date=value,
+                     state='current' if index == current else 'done' if done else 'pending')
+                for index, (label, value, done) in enumerate(steps)]
+
+    @property
+    def flow_label(self):
+        if self.status == 'Cancelada': return 'Cancelada'
+        if self.received_date: return 'Recebido'
+        if self.invoiced_date: return 'Faturado'
+        if self.approved_date and self.status in ['Aguardando avaliação', 'Aguardando aprovação']:
+            return 'Aprovado · aguardando início'
+        return self.status
 
 class Item(db.Model):
     __tablename__ = 'ecs_items'

@@ -59,6 +59,16 @@ class PhotoForm(FlaskForm):
     caption = StringField('Descrição', validators=[Optional(), Length(max=200)])
     version = HiddenField()
 
+class FlowForm(FlaskForm):
+    action = SelectField('Atualização do fluxo', choices=[
+        ('approve', 'Registrar aprovação'),
+        ('invoice', 'Registrar faturamento'),
+        ('receive', 'Confirmar recebimento integral'),
+    ])
+    action_date = DateField('Data da etapa', validators=[InputRequired()])
+    reference = StringField('Referência / observação (opcional)', validators=[Optional(), Length(max=300)])
+    version = HiddenField()
+
 class UserForm(FlaskForm):
     username = StringField('Usuário (login)', validators=[DataRequired(), Length(min=3,max=80), Regexp(r'^[a-zA-Z0-9_.-]+$', message='Use letras, números, ponto, hífen ou sublinhado.')])
     name = StringField('Nome', validators=[DataRequired(), Length(max=120)])

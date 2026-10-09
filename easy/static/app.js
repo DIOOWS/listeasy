@@ -26,3 +26,11 @@ if(appMenu){
  appMenu.addEventListener('click',event=>{if(event.target===appMenu){const box=appMenu.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)appMenu.close();}});
  appMenu.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>appMenu.close()));
 }
+
+// No computador, o fluxo fica visível; no celular, cada OS abre ao tocar.
+const flowRows=[...document.querySelectorAll('[data-flow-order]')];
+if(flowRows.length){
+ const desktopFlow=window.matchMedia('(min-width:701px)');
+ const adaptFlow=()=>flowRows.forEach(row=>row.open=desktopFlow.matches);
+ adaptFlow();desktopFlow.addEventListener('change',adaptFlow);
+}
