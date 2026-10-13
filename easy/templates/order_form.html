@@ -2,7 +2,7 @@
 <div class="heading"><h1>{{ title }}</h1><a class="button secondary" href="{{ back }}">Voltar</a></div>
 {% if empty %}<div class="alert">{{ empty_message }} <a href="{{ url_for('web.client_form') }}">Cadastrar cliente</a></div>{% else %}
 <form method="post" class="panel os-form">{{ form.hidden_tag() }}
-<h2>Cliente e veículo</h2><p class="os-form-help">Preencha o veículo aqui, sem cadastro prévio.</p>
+<h2>Cliente e veículo</h2><p class="os-form-help">Somente o cliente é obrigatório. Preencha as demais informações quando estiverem disponíveis.</p>
 <div class="form-grid">{{ field(form.client_id) }}{{ field(form.plate) }}{{ field(form.model) }}{{ field(form.fleet) }}{{ field(form.mileage) }}</div>
 <h2>Atendimento</h2><div class="form-grid">{{ field(form.number) }}{{ field(form.responsible) }}{{ field(form.entry_date) }}{{ field(form.due_date) }}{{ field(form.problem) }}{{ field(form.diagnosis) }}{{ field(form.notes) }}</div>
 <div class="actions"><button class="button">Salvar OS</button><a class="button secondary" href="{{ back }}">Cancelar</a></div>

@@ -62,7 +62,7 @@ class Order(db.Model):
     __tablename__ = 'ecs_orders'
     id = db.Column(db.Integer, primary_key=True)
     number = db.Column(db.String(50), unique=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('ecs_vehicles.id'), nullable=False, index=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('ecs_vehicles.id'), nullable=True, index=True)
     client_id = db.Column(db.Integer, db.ForeignKey('ecs_clients.id'), nullable=False)
     vehicle_plate = db.Column(db.String(10))
     vehicle_model = db.Column(db.String(120))
@@ -75,7 +75,7 @@ class Order(db.Model):
     ready_date = db.Column(db.Date)
     invoiced_date = db.Column(db.Date)
     received_date = db.Column(db.Date)
-    mileage = db.Column(db.Integer, nullable=False, default=0)
+    mileage = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(40), nullable=False, default=STATUSES[0], index=True)
     responsible = db.Column(db.String(120), nullable=False)
     problem = db.Column(db.Text, nullable=False)
@@ -96,13 +96,13 @@ class Order(db.Model):
     photos = db.relationship('Photo', back_populates='order', cascade='all, delete-orphan', order_by='Photo.id')
     @property
     def plate(self):
-        return self.vehicle_plate if self.vehicle_plate is not None else self.vehicle.plate
+        return self.vehicle_plate if self.vehicle_plate is not None else self.vehicle.plate if self.vehicle else ''
     @property
     def model(self):
-        return self.vehicle_model if self.vehicle_model is not None else self.vehicle.model
+        return self.vehicle_model if self.vehicle_model is not None else self.vehicle.model if self.vehicle else ''
     @property
     def fleet(self):
-        return self.vehicle_fleet if self.vehicle_fleet is not None else self.vehicle.fleet
+        return self.vehicle_fleet if self.vehicle_fleet is not None else self.vehicle.fleet if self.vehicle else ''
     @property
     def status_tone(self):
         return {'Aguardando avaliação':'gray', 'Aguardando aprovação':'amber',

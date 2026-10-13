@@ -53,17 +53,23 @@ def order_choices(form,order=None):
 
 def populate_order(form,order):
     for name in ['client_id','entry_date','due_date','mileage','responsible','problem','diagnosis','notes']:
-        setattr(order,name,getattr(form,name).data)
-    order.vehicle_plate=re.sub(r'[\s-]','',form.plate.data.strip().upper())
-    order.vehicle_model=form.model.data.strip()
+        value=getattr(form,name).data
+        if name in ['responsible','problem','diagnosis','notes']:value=(value or '').strip()
+        setattr(order,name,value)
+    order.vehicle_plate=re.sub(r'[\s-]','',(form.plate.data or '').strip().upper())
+    order.vehicle_model=(form.model.data or '').strip()
     order.vehicle_fleet=(form.fleet.data or '').strip()
     # A relação antiga fica interna para compatibilidade; nunca altera outra OS.
-    vehicle=db.session.scalar(db.select(Vehicle).where(Vehicle.plate==order.vehicle_plate))
-    if vehicle is None:
-        vehicle=Vehicle(plate=order.vehicle_plate,model=order.vehicle_model,
-                        fleet=order.vehicle_fleet,client_id=form.client_id.data)
-        db.session.add(vehicle)
-    order.vehicle=vehicle
+    if order.vehicle_plate:
+        vehicle=db.session.scalar(db.select(Vehicle).where(Vehicle.plate==order.vehicle_plate))
+        if vehicle is None:
+            vehicle=Vehicle(plate=order.vehicle_plate,model=order.vehicle_model,
+                            fleet=order.vehicle_fleet,client_id=form.client_id.data)
+            db.session.add(vehicle)
+        order.vehicle=vehicle
+    else:
+        order.vehicle=None
+
 
 def validate_order(form,order=None):
     if form.due_date.data and form.entry_date.data and form.due_date.data<form.entry_date.data:
@@ -73,11 +79,9 @@ def validate_order(form,order=None):
     client=db.session.get(Client,form.client_id.data)
     if not client or (not client.active and (not order or order.client_id!=client.id)):
         form.client_id.errors.append('Selecione um cliente ativo.');return False
-    plate=re.sub(r'[\s-]','',form.plate.data.strip().upper())
-    if not plate or len(plate)>10:
+    plate=re.sub(r'[\s-]','',(form.plate.data or '').strip().upper())
+    if len(plate)>10:
         form.plate.errors.append('Informe uma identificação de até 10 caracteres.');return False
-    if not form.model.data.strip():
-        form.model.errors.append('Informe a marca ou o modelo.');return False
     number=(form.number.data or '').strip().upper()
     existing=db.session.scalar(db.select(Order).where(Order.number==number)) if number else None
     if existing and (not order or existing.id!=order.id):
@@ -179,7 +183,7 @@ def vehicle_history(ident):
     return redirect(url_for('web.orders',q=vehicle.plate))
 
 def filtered_orders():
-    query=db.select(Order).where(Order.deleted_at.is_(None)).join(Vehicle).join(Client,Order.client_id==Client.id).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items))
+    query=db.select(Order).where(Order.deleted_at.is_(None)).outerjoin(Vehicle).join(Client,Order.client_id==Client.id).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items))
     q=request.args.get('q','').strip()[:150];status=request.args.get('status','')
     if q:query=query.where(or_(Order.number.ilike('%'+q+'%'),func.coalesce(Order.vehicle_plate,Vehicle.plate).ilike('%'+q+'%'),func.coalesce(Order.vehicle_fleet,Vehicle.fleet).ilike('%'+q+'%'),Client.name.ilike('%'+q+'%')))
     if status in STATUSES:query=query.where(Order.status==status)
@@ -203,7 +207,7 @@ def orders():
 @web.route('/ordens/nova',methods=['GET','POST'])
 @login_required
 def order_new():
-    form=OrderForm(responsible=current_user.name)
+    form=OrderForm()
     order_choices(form)
     if form.validate_on_submit() and validate_order(form):
         order=Order();populate_order(form,order);order.number=(form.number.data or '').strip().upper() or None
