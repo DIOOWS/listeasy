@@ -63,6 +63,9 @@ class Order(db.Model):
     number = db.Column(db.String(50), unique=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('ecs_vehicles.id'), nullable=False, index=True)
     client_id = db.Column(db.Integer, db.ForeignKey('ecs_clients.id'), nullable=False)
+    vehicle_plate = db.Column(db.String(10))
+    vehicle_model = db.Column(db.String(120))
+    vehicle_fleet = db.Column(db.String(40))
     entry_date = db.Column(db.Date, nullable=False, index=True)
     due_date = db.Column(db.Date, nullable=False, index=True)
     delivered_date = db.Column(db.Date)
@@ -89,6 +92,26 @@ class Order(db.Model):
     checks = db.relationship('Check', back_populates='order', cascade='all, delete-orphan', order_by='Check.id')
     events = db.relationship('Event', back_populates='order', cascade='all, delete-orphan', order_by='Event.created_at.desc()')
     photos = db.relationship('Photo', back_populates='order', cascade='all, delete-orphan', order_by='Photo.id')
+    @property
+    def plate(self):
+        return self.vehicle_plate if self.vehicle_plate is not None else self.vehicle.plate
+    @property
+    def model(self):
+        return self.vehicle_model if self.vehicle_model is not None else self.vehicle.model
+    @property
+    def fleet(self):
+        return self.vehicle_fleet if self.vehicle_fleet is not None else self.vehicle.fleet
+    @property
+    def status_tone(self):
+        return {'Aguardando avaliação':'gray', 'Aguardando aprovação':'amber',
+                'Aguardando peças':'orange', 'Em serviço':'blue',
+                'Pronto para entrega':'teal', 'Entregue':'green', 'Cancelada':'red'}.get(self.status,'gray')
+    @property
+    def flow_tone(self):
+        if self.status=='Cancelada':return 'red'
+        if self.received_date:return 'green'
+        if self.invoiced_date:return 'purple'
+        return self.status_tone
     def subtotal(self, kind=None):
         return sum((x.total for x in self.items if kind is None or x.kind == kind), Decimal('0')).quantize(Decimal('0.01'))
     @property

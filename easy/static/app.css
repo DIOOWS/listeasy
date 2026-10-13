@@ -22,3 +22,12 @@ h1,h2,h3,th{font-weight:700}a:hover{color:#000}.button,.button.secondary{color:#
 a,button,summary,select{touch-action:manipulation}
 .action-status{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:100;max-width:calc(100% - 24px);padding:10px 16px;border:1px solid #d7d9dd;border-radius:8px;background:#fff;color:#000;box-shadow:0 2px 8px #0001;font-size:13px;font-weight:700;pointer-events:none}
 form[aria-busy=true] button[type=submit],form[aria-busy=true] .button{opacity:.65}
+
+/* Navegação sem reload: apenas o conteúdo muda, sem aviso sobre a tela. */
+body.navigating::before{content:'';position:fixed;top:0;left:0;width:35%;height:3px;background:#333;z-index:200;animation:request-progress 1.1s ease-in-out infinite;pointer-events:none}
+@keyframes request-progress{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+.mobile-nav .nav-pending{background:#f4f5f7;border-radius:8px;font-weight:700}
+.request-message{margin:10px 0;font-size:12px;font-weight:700;color:#000}.request-error{padding:10px;border:1px solid #ddd;border-radius:6px}
+@media(prefers-reduced-motion:reduce){body.navigating::before{animation:none;width:100%}}
+
+.status-label{display:inline-flex;align-items:center;gap:6px;color:#000;font-size:12px}.status-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0;background:#9ca3af}.status-gray{background:#9ca3af}.status-amber{background:#eab308}.status-orange{background:#f97316}.status-blue{background:#3b82f6}.status-teal{background:#14b8a6}.status-green{background:#22c55e}.status-red{background:#ef4444}.status-purple{background:#a855f7}.os-form h2{margin:20px 0 12px}.os-form h2:first-child{margin-top:0}.os-form-help{font-size:12px;margin:0 0 14px}

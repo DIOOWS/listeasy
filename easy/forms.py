@@ -17,18 +17,12 @@ class ClientForm(FlaskForm):
     notes = TextAreaField('Observações', validators=[Optional(), Length(max=5000)])
     active = BooleanField('Cadastro ativo', default=True)
 
-class VehicleForm(FlaskForm):
-    client_id = SelectField('Cliente', coerce=int, validators=[InputRequired()])
-    plate = StringField('Placa', validators=[DataRequired(), Length(max=10)])
-    fleet = StringField('Número da frota', validators=[Optional(), Length(max=40)])
-    model = StringField('Marca / modelo', validators=[DataRequired(), Length(max=120)])
-    year = StringField('Ano', validators=[Optional(), Length(max=20)])
-    notes = TextAreaField('Observações', validators=[Optional(), Length(max=5000)])
-    active = BooleanField('Cadastro ativo', default=True)
-
 class OrderForm(FlaskForm):
     number = StringField('Número da OS (vazio = automático)', validators=[Optional(), Length(max=50)])
-    vehicle_id = SelectField('Veículo', coerce=int, validators=[InputRequired()])
+    client_id = SelectField('Cliente', coerce=int, validators=[InputRequired()])
+    plate = StringField('Placa / identificação', validators=[DataRequired(), Length(max=10)], render_kw={'placeholder':'Ex.: ABC1D23','autocomplete':'off'})
+    model = StringField('Marca / modelo', validators=[DataRequired(), Length(max=120)], render_kw={'placeholder':'Ex.: Fiat Ducato'})
+    fleet = StringField('Número da frota (opcional)', validators=[Optional(), Length(max=40)])
     entry_date = DateField('Data de entrada', validators=[InputRequired()])
     due_date = DateField('Previsão de entrega', validators=[InputRequired()])
     mileage = IntegerField('Quilometragem', validators=[InputRequired(), NumberRange(min=0, max=2147483647)], default=0)

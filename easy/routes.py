@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db, limiter, today
 from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, ENTRY_CHECKS, EXIT_CHECKS, utcnow
-from .forms import LoginForm, ClientForm, VehicleForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm
+from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm
 
 web=Blueprint('web',__name__)
 DUMMY_HASH=generate_password_hash('dummy-password-never-a-login')
@@ -41,21 +41,38 @@ def mutable(order):
         abort(409,description='A OS foi alterada. Atualize a página e tente novamente.')
 
 def order_choices(form,order=None):
-    condition=Vehicle.active.is_(True)
-    if order:condition=or_(condition,Vehicle.id==order.vehicle_id)
-    vehicles=db.session.scalars(db.select(Vehicle).where(condition).options(db.joinedload(Vehicle.client)).order_by(Vehicle.plate)).all()
-    form.vehicle_id.choices=[(v.id,f'{v.plate} · {v.model} · {v.client.name}') for v in vehicles]
+    condition=Client.active.is_(True)
+    if order:condition=or_(condition,Client.id==order.client_id)
+    clients=db.session.scalars(db.select(Client).where(condition).order_by(Client.name)).all()
+    form.client_id.choices=[(client.id,client.name) for client in clients]
+
+def populate_order(form,order):
+    for name in ['client_id','entry_date','due_date','mileage','responsible','problem','diagnosis','notes','discount']:
+        setattr(order,name,getattr(form,name).data)
+    order.vehicle_plate=re.sub(r'[\s-]','',form.plate.data.strip().upper())
+    order.vehicle_model=form.model.data.strip()
+    order.vehicle_fleet=(form.fleet.data or '').strip()
+    # A relação antiga fica interna para compatibilidade; nunca altera outra OS.
+    vehicle=db.session.scalar(db.select(Vehicle).where(Vehicle.plate==order.vehicle_plate))
+    if vehicle is None:
+        vehicle=Vehicle(plate=order.vehicle_plate,model=order.vehicle_model,
+                        fleet=order.vehicle_fleet,client_id=form.client_id.data)
+        db.session.add(vehicle)
+    order.vehicle=vehicle
 
 def validate_order(form,order=None):
     if form.due_date.data<form.entry_date.data:
         form.due_date.errors.append('A entrega prevista deve ser igual ou posterior à entrada.');return False
     if order and any(value and value<form.entry_date.data for value in [order.approved_date, order.started_date, order.ready_date, order.delivered_date, order.invoiced_date, order.received_date]):
         form.entry_date.errors.append('A entrada não pode ser posterior às etapas já registradas.');return False
-    vehicle=db.session.get(Vehicle,form.vehicle_id.data)
-    if order and vehicle.id!=order.vehicle_id:
-        form.vehicle_id.errors.append('O veículo de uma OS já criada não pode ser trocado.');return False
-    if not order and (not vehicle.active or not vehicle.client.active):
-        form.vehicle_id.errors.append('O veículo e seu cliente precisam estar ativos.');return False
+    client=db.session.get(Client,form.client_id.data)
+    if not client or (not client.active and (not order or order.client_id!=client.id)):
+        form.client_id.errors.append('Selecione um cliente ativo.');return False
+    plate=re.sub(r'[\s-]','',form.plate.data.strip().upper())
+    if not plate or len(plate)>10:
+        form.plate.errors.append('Informe uma identificação de até 10 caracteres.');return False
+    if not form.model.data.strip():
+        form.model.errors.append('Informe a marca ou o modelo.');return False
     number=(form.number.data or '').strip().upper()
     existing=db.session.scalar(db.select(Order).where(Order.number==number)) if number else None
     if existing and (not order or existing.id!=order.id):
@@ -128,45 +145,28 @@ def client_form(ident=None):
         flash('Cliente salvo.','success');return redirect(url_for('web.clients'))
     return render_template('form.html',form=form,title='Editar cliente' if ident else 'Novo cliente',back=url_for('web.clients'))
 
+# Links antigos continuam válidos, mas não há cadastro separado de veículos.
 @web.get('/veiculos')
 @login_required
 def vehicles():
-    q=request.args.get('q','').strip()[:150]
-    query=db.select(Vehicle).join(Client).options(db.joinedload(Vehicle.client))
-    if q:query=query.where(or_(Vehicle.plate.ilike('%'+q+'%'),Vehicle.fleet.ilike('%'+q+'%'),Vehicle.model.ilike('%'+q+'%'),Client.name.ilike('%'+q+'%')))
-    page=db.paginate(query.order_by(Vehicle.plate),per_page=30,error_out=False)
-    return render_template('vehicles.html',page=page,q=q)
+    return redirect(url_for('web.orders'))
 
 @web.route('/veiculos/novo',methods=['GET','POST'])
 @web.route('/veiculos/<int:ident>/editar',methods=['GET','POST'])
 @login_required
 def vehicle_form(ident=None):
-    obj=db.get_or_404(Vehicle,ident) if ident else Vehicle()
-    form=VehicleForm(obj=obj if ident else None)
-    clients=db.session.scalars(db.select(Client).where(or_(Client.active.is_(True),Client.id==obj.client_id)).order_by(Client.name)).all()
-    form.client_id.choices=[(c.id,c.name) for c in clients]
-    if form.validate_on_submit():
-        plate=re.sub(r'[^A-Z0-9]','',form.plate.data.upper())
-        if not re.fullmatch(r'[A-Z]{3}[0-9][A-Z0-9][0-9]{2}',plate):
-            form.plate.errors.append('Informe uma placa brasileira válida, antiga ou Mercosul.')
-        elif db.session.scalar(db.select(Vehicle).where(Vehicle.plate==plate,Vehicle.id!=(ident or 0))):
-            form.plate.errors.append('Esta placa já foi cadastrada.')
-        else:
-            form.populate_obj(obj);obj.plate=plate;db.session.add(obj);db.session.commit()
-            flash('Veículo salvo.','success');return redirect(url_for('web.vehicles'))
-    return render_template('form.html',form=form,title='Editar veículo' if ident else 'Novo veículo',back=url_for('web.vehicles'),empty=not clients,empty_message='Cadastre um cliente ativo antes do veículo.')
+    return redirect(url_for('web.order_new'),code=303 if request.method=='POST' else 302)
 
 @web.get('/veiculos/<int:ident>')
 @login_required
 def vehicle_history(ident):
     vehicle=db.get_or_404(Vehicle,ident)
-    page=db.paginate(db.select(Order).where(Order.vehicle_id==ident).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items)).order_by(Order.entry_date.desc(),Order.id.desc()),per_page=30,error_out=False)
-    return render_template('orders.html',page=page,title=f'Histórico · {vehicle.plate}',q='',status='',vehicle=vehicle)
+    return redirect(url_for('web.orders',q=vehicle.plate))
 
 def filtered_orders():
     query=db.select(Order).join(Vehicle).join(Client,Order.client_id==Client.id).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items))
     q=request.args.get('q','').strip()[:150];status=request.args.get('status','')
-    if q:query=query.where(or_(Order.number.ilike('%'+q+'%'),Vehicle.plate.ilike('%'+q+'%'),Vehicle.fleet.ilike('%'+q+'%'),Client.name.ilike('%'+q+'%')))
+    if q:query=query.where(or_(Order.number.ilike('%'+q+'%'),func.coalesce(Order.vehicle_plate,Vehicle.plate).ilike('%'+q+'%'),func.coalesce(Order.vehicle_fleet,Vehicle.fleet).ilike('%'+q+'%'),Client.name.ilike('%'+q+'%')))
     if status in STATUSES:query=query.where(Order.status==status)
     if request.args.get('open')=='1':query=query.where(~Order.status.in_(['Entregue','Cancelada']))
     if request.args.get('finance')=='1':query=query.where(Order.status=='Entregue',Order.received_date.is_(None))
@@ -191,8 +191,7 @@ def order_new():
     form=OrderForm(entry_date=today(),due_date=today(),responsible=current_user.name)
     order_choices(form)
     if form.validate_on_submit() and validate_order(form):
-        order=Order();form.populate_obj(order);order.number=(form.number.data or '').strip().upper() or None
-        vehicle=db.session.get(Vehicle,form.vehicle_id.data);order.client_id=vehicle.client_id
+        order=Order();populate_order(form,order);order.number=(form.number.data or '').strip().upper() or None
         db.session.add(order);db.session.flush()
         if not order.number:order.number=f'OS-{order.created_at.year}-{order.id:06d}'
         for stage,labels in [('entrada',ENTRY_CHECKS),('saida',EXIT_CHECKS)]:
@@ -200,7 +199,7 @@ def order_new():
         event(order,'OS criada.');db.session.commit()
         flash('OS criada. Agora adicione os serviços e as peças.','success')
         return redirect(url_for('web.order_detail',ident=order.id))
-    return render_template('form.html',form=form,title='Nova ordem de serviço',back=url_for('web.orders'),empty=not form.vehicle_id.choices,empty_message='Cadastre um cliente e um veículo ativo antes de abrir uma OS.')
+    return render_template('order_form.html',form=form,title='Nova ordem de serviço',back=url_for('web.orders'),empty=not form.client_id.choices,empty_message='Cadastre um cliente ativo para abrir uma OS. O veículo é preenchido aqui.')
 
 @web.route('/ordens/<int:ident>/editar',methods=['GET','POST'])
 @login_required
@@ -212,10 +211,10 @@ def order_edit(ident):
     if form.validate_on_submit():
         mutable(order)
         if validate_order(form,order):
-            number=(form.number.data or order.number).strip().upper();form.populate_obj(order);order.number=number;order.version=int(request.form['version'])
+            number=(form.number.data or order.number).strip().upper();populate_order(form,order);order.number=number
             event(order,'Dados da OS atualizados.');db.session.commit();flash('OS atualizada.','success')
             return redirect(url_for('web.order_detail',ident=ident))
-    return render_template('form.html',form=form,title=f'Editar {order.number}',back=url_for('web.order_detail',ident=ident))
+    return render_template('order_form.html',form=form,title=f'Editar {order.number}',back=url_for('web.order_detail',ident=ident))
 
 @web.get('/ordens/<int:ident>')
 @login_required
@@ -449,7 +448,7 @@ def report_export():
     items=book.create_sheet('Serviços e peças');items.append(['OS','Tipo','Descrição','Quantidade','Valor unitário','Total','Responsável','Concluído'])
     checks=book.create_sheet('Checklist');checks.append(['OS','Etapa','Item','Resultado','Observações'])
     for order in rows:
-        sheet.append([safe_cell(x) for x in [order.number,order.client.name,order.vehicle.plate,order.vehicle.fleet,order.entry_date,order.due_date,order.delivered_date,order.status,order.subtotal('servico'),order.subtotal('peca'),order.discount,order.total,order.approved_date,order.started_date,order.ready_date,order.invoiced_date,order.received_date,order.flow_label]])
+        sheet.append([safe_cell(x) for x in [order.number,order.client.name,order.plate,order.fleet,order.entry_date,order.due_date,order.delivered_date,order.status,order.subtotal('servico'),order.subtotal('peca'),order.discount,order.total,order.approved_date,order.started_date,order.ready_date,order.invoiced_date,order.received_date,order.flow_label]])
         for item in order.items:items.append([safe_cell(x) for x in [order.number,item.kind,item.description,item.quantity,item.unit_price,item.total,item.responsible,'Sim' if item.done else 'Não']])
         for check in order.checks:checks.append([safe_cell(x) for x in [order.number,check.stage,check.label,check.result,check.notes]])
     from openpyxl.styles import Font, PatternFill
