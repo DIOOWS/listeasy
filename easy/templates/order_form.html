@@ -4,6 +4,6 @@
 <form method="post" class="panel os-form">{{ form.hidden_tag() }}
 <h2>Cliente e veículo</h2><p class="os-form-help">Preencha o veículo aqui, sem cadastro prévio.</p>
 <div class="form-grid">{{ field(form.client_id) }}{{ field(form.plate) }}{{ field(form.model) }}{{ field(form.fleet) }}{{ field(form.mileage) }}</div>
-<h2>Atendimento</h2><div class="form-grid">{{ field(form.number) }}{{ field(form.responsible) }}{{ field(form.entry_date) }}{{ field(form.due_date) }}{{ field(form.problem) }}{{ field(form.diagnosis) }}{{ field(form.notes) }}{{ field(form.discount) }}</div>
+<h2>Atendimento</h2><div class="form-grid">{{ field(form.number) }}{{ field(form.responsible) }}{{ field(form.entry_date) }}{{ field(form.due_date) }}{{ field(form.problem) }}{{ field(form.diagnosis) }}{{ field(form.notes) }}</div>
 <div class="actions"><button class="button">Salvar OS</button><a class="button secondary" href="{{ back }}">Cancelar</a></div>
 </form>{% endif %}{% endblock %}

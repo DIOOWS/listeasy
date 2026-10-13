@@ -8,7 +8,7 @@
 
 {% macro flow_row(order) %}
 <details class="flow-order" data-flow-order>
-<summary><span class="flow-summary-main"><strong>{{ order.number }} · {{ order.plate }}</strong><span>{{ order.client.name }} · {{ order.model }}</span><span class="flow-summary-due">Prazo: {{ order.due_date|datebr }}{% if not order.closed and order.due_date<today %} · Em atraso{% endif %}</span></span><span class="flow-summary-end">{{ status_label(order,true) }}<span class="flow-chevron" aria-hidden="true">⌄</span></span></summary>
+<summary><span class="flow-summary-main"><strong>{{ order.number }} · {{ order.plate }}</strong><span>{{ order.client.name }} · {{ order.model }}</span><span class="flow-summary-due">Prazo: {{ order.due_date|datebr if order.due_date else 'Não informado' }}{% if not order.closed and order.due_date and order.due_date<today %} · Em atraso{% endif %}</span></span><span class="flow-summary-end">{{ status_label(order,true) }}<span class="flow-chevron" aria-hidden="true">⌄</span></span></summary>
 <div class="flow-expanded"><div class="flow-row-meta"><span>Entrada: {{ order.entry_date|datebr }}</span><span>Total: <b>{{ order.total|brl }}</b></span></div>{{ timeline(order) }}<div class="flow-actions"><span>{{ order.responsible }}</span><a class="button secondary" href="{{ url_for('web.order_detail',ident=order.id) }}">Abrir OS</a></div></div>
 </details>
 {% endmacro %}

@@ -23,14 +23,13 @@ class OrderForm(FlaskForm):
     plate = StringField('Placa / identificação', validators=[DataRequired(), Length(max=10)], render_kw={'placeholder':'Ex.: ABC1D23','autocomplete':'off'})
     model = StringField('Marca / modelo', validators=[DataRequired(), Length(max=120)], render_kw={'placeholder':'Ex.: Fiat Ducato'})
     fleet = StringField('Número da frota (opcional)', validators=[Optional(), Length(max=40)])
-    entry_date = DateField('Data de entrada', validators=[InputRequired()])
-    due_date = DateField('Previsão de entrega', validators=[InputRequired()])
+    entry_date = DateField('Data de entrada (opcional)', validators=[Optional()])
+    due_date = DateField('Previsão de entrega (opcional)', validators=[Optional()])
     mileage = IntegerField('Quilometragem', validators=[InputRequired(), NumberRange(min=0, max=2147483647)], default=0)
     responsible = StringField('Responsável pelo atendimento', validators=[DataRequired(), Length(max=120)])
     problem = TextAreaField('Problema relatado / solicitação', validators=[DataRequired(), Length(max=10000)])
     diagnosis = TextAreaField('Diagnóstico', validators=[Optional(), Length(max=10000)])
     notes = TextAreaField('Observações', validators=[Optional(), Length(max=10000)])
-    discount = DecimalField('Desconto (R$)', places=2, validators=[InputRequired(), NumberRange(min=0, max=Decimal('9999999999.99'))], default=0)
     version = HiddenField()
 
 class ItemForm(FlaskForm):
@@ -44,7 +43,7 @@ class ItemForm(FlaskForm):
 
 class StatusForm(FlaskForm):
     status = SelectField('Novo status')
-    delivered_date = DateField('Data real da entrega', validators=[Optional()])
+    delivered_date = DateField('Data real da entrega (vazio = hoje)', validators=[Optional()])
     version = HiddenField()
 
 class PhotoForm(FlaskForm):
@@ -59,7 +58,7 @@ class FlowForm(FlaskForm):
         ('invoice', 'Registrar faturamento'),
         ('receive', 'Confirmar recebimento integral'),
     ])
-    action_date = DateField('Data da etapa', validators=[InputRequired()])
+    action_date = DateField('Data da etapa (vazio = hoje)', validators=[Optional()])
     reference = StringField('Referência / observação (opcional)', validators=[Optional(), Length(max=300)])
     version = HiddenField()
 
