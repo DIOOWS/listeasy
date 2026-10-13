@@ -20,8 +20,8 @@ def validate_environment():
     except Exception:
         errors.append('DATABASE_URL ausente ou inválida.')
     password=os.getenv('ADMIN_PASSWORD','')
-    if password and not 12<=len(password)<=128:
-        errors.append('ADMIN_PASSWORD precisa ter 12–128 caracteres.')
+    if password and not 6<=len(password)<=128:
+        errors.append('ADMIN_PASSWORD precisa ter 6–128 caracteres.')
     cloud=os.getenv('CLOUDINARY_URL','')
     if cloud:
         try:

@@ -11,8 +11,8 @@ with app.app_context():
         username=os.getenv('ADMIN_USERNAME','').strip().lower()
         name=os.getenv('ADMIN_NAME','').strip()
         password=os.getenv('ADMIN_PASSWORD','')
-        if not re.fullmatch(r'[a-z0-9_.-]{3,80}',username) or not name or len(name)>120 or not 12<=len(password)<=128:
-            raise RuntimeError('Primeiro acesso: defina ADMIN_USERNAME, ADMIN_NAME e ADMIN_PASSWORD (12–128 caracteres).')
+        if not re.fullmatch(r'[a-z0-9_.-]{3,80}',username) or not name or len(name)>120 or not 6<=len(password)<=128:
+            raise RuntimeError('Primeiro acesso: defina ADMIN_USERNAME, ADMIN_NAME e ADMIN_PASSWORD (6–128 caracteres).')
         if db.session.scalar(db.select(User.id).where(User.username==username)):
             raise RuntimeError('O usuário inicial já existe. Recupere o administrador com flask reset-password.')
         user=User(username=username,name=name,role='admin');user.set_password(password)
