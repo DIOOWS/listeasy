@@ -120,11 +120,11 @@
   const data=new FormData(form);
   // FormData(form) não inclui o botão: preserva toggle/remove e outras ações.
   if(button?.name)data.append(button.name,button.value);
-  const savedScroll=window.scrollY, originalLabel=button?.textContent;
+  const savedScroll=window.scrollY, originalLabel=button?.innerHTML;
   const opened=[...document.querySelectorAll('details[open]')].map(row=>row.className+'|'+row.querySelector('summary')?.textContent);
   const others=[...document.querySelectorAll('form[data-dirty]')].filter(other=>other!==form);
   form.setAttribute('aria-busy','true');form.dataset.sending='true';
-  if(button){button.disabled=true;button.textContent='Salvando…';}
+  if(button){button.disabled=true;button.setAttribute('aria-busy','true');if(button.classList.contains('icon-button'))button.innerHTML='<span class="button-spinner" aria-hidden="true"></span>';else button.textContent='Salvando…';}
   notice(form,'Salvando…');
   try{
    const page=await readPage(form.action||location.href,{method:'POST',body:data});
@@ -148,7 +148,7 @@
    notice(form,navigator.onLine===false?'A conexão caiu. Não foi possível confirmar o salvamento. Confira a OS antes de repetir.':error.message+' Seu preenchimento foi mantido.',true);
   }finally{
    saving=false;form.removeAttribute('aria-busy');delete form.dataset.sending;
-   if(button){button.disabled=false;button.textContent=originalLabel;}
+   if(button){button.disabled=false;button.removeAttribute('aria-busy');button.innerHTML=originalLabel;}
    scheduleWarm();
   }
  }

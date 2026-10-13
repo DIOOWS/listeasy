@@ -25,6 +25,11 @@ def admin_required(fn):
         return fn(*args,**kwargs)
     return wrapped
 
+def get_order(ident,**kwargs):
+    order=db.get_or_404(Order,ident,**kwargs)
+    if order.deleted_at:abort(404)
+    return order
+
 def event(order,message,invalidate_ready=True):
     if invalidate_ready and order.status=='Pronto para entrega':
         order.status='Em serviço'
@@ -41,7 +46,7 @@ def mutable(order):
         abort(409,description='A OS foi alterada. Atualize a página e tente novamente.')
 
 def order_choices(form,order=None):
-    condition=Client.active.is_(True)
+    condition=Client.active.is_(True) & Client.deleted_at.is_(None)
     if order:condition=or_(condition,Client.id==order.client_id)
     clients=db.session.scalars(db.select(Client).where(condition).order_by(Client.name)).all()
     form.client_id.choices=[(client.id,client.name) for client in clients]
@@ -110,8 +115,8 @@ def logout():
 @web.get('/')
 @login_required
 def dashboard():
-    active=~Order.status.in_(['Entregue','Cancelada'])
-    pending_finance=(Order.status=='Entregue') & Order.received_date.is_(None)
+    active=Order.deleted_at.is_(None) & ~Order.status.in_(['Entregue','Cancelada'])
+    pending_finance=Order.deleted_at.is_(None) & (Order.status=='Entregue') & Order.received_date.is_(None)
     day=today()
     totals=db.session.execute(db.select(
         func.count(case((active,1))),
@@ -127,7 +132,7 @@ def dashboard():
 @login_required
 def clients():
     q=request.args.get('q','').strip()[:150]
-    query=db.select(Client)
+    query=db.select(Client).where(Client.deleted_at.is_(None))
     if q:query=query.where(Client.name.ilike('%'+q+'%'))
     page=db.paginate(query.order_by(Client.name),per_page=30,error_out=False)
     return render_template('clients.html',page=page,q=q)
@@ -137,11 +142,23 @@ def clients():
 @login_required
 def client_form(ident=None):
     obj=db.get_or_404(Client,ident) if ident else Client()
+    if ident and obj.deleted_at:abort(404)
     form=ClientForm(obj=obj if ident else None)
     if form.validate_on_submit():
         form.populate_obj(obj);obj.name=obj.name.strip();db.session.add(obj);db.session.commit()
         flash('Cliente salvo.','success');return redirect(url_for('web.clients'))
     return render_template('form.html',form=form,title='Editar cliente' if ident else 'Novo cliente',back=url_for('web.clients'))
+
+@web.post('/clientes/<int:ident>/excluir')
+@admin_required
+def client_delete(ident):
+    client=db.get_or_404(Client,ident)
+    if client.deleted_at:abort(404)
+    client.deleted_at=utcnow()
+    client.active=False
+    db.session.commit()
+    flash('Cliente excluído. As OS existentes foram preservadas.','success')
+    return redirect(url_for('web.clients'))
 
 # Links antigos continuam válidos, mas não há cadastro separado de veículos.
 @web.get('/veiculos')
@@ -162,7 +179,7 @@ def vehicle_history(ident):
     return redirect(url_for('web.orders',q=vehicle.plate))
 
 def filtered_orders():
-    query=db.select(Order).join(Vehicle).join(Client,Order.client_id==Client.id).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items))
+    query=db.select(Order).where(Order.deleted_at.is_(None)).join(Vehicle).join(Client,Order.client_id==Client.id).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items))
     q=request.args.get('q','').strip()[:150];status=request.args.get('status','')
     if q:query=query.where(or_(Order.number.ilike('%'+q+'%'),func.coalesce(Order.vehicle_plate,Vehicle.plate).ilike('%'+q+'%'),func.coalesce(Order.vehicle_fleet,Vehicle.fleet).ilike('%'+q+'%'),Client.name.ilike('%'+q+'%')))
     if status in STATUSES:query=query.where(Order.status==status)
@@ -202,7 +219,7 @@ def order_new():
 @web.route('/ordens/<int:ident>/editar',methods=['GET','POST'])
 @login_required
 def order_edit(ident):
-    order=db.get_or_404(Order,ident)
+    order=get_order(ident)
     if order.closed:abort(409,description='Reabra a OS antes de editar.')
     form=OrderForm(obj=order);order_choices(form,order)
     if request.method=='GET':form.version.data=str(order.version)
@@ -214,10 +231,22 @@ def order_edit(ident):
             return redirect(url_for('web.order_detail',ident=ident))
     return render_template('order_form.html',form=form,title=f'Editar {order.number}',back=url_for('web.order_detail',ident=ident))
 
+@web.post('/ordens/<int:ident>/excluir')
+@admin_required
+def order_delete(ident):
+    order=get_order(ident)
+    if request.form.get('version')!=str(order.version):
+        abort(409,description='A OS foi alterada. Atualize a página antes de excluir.')
+    order.deleted_at=utcnow()
+    event(order,'OS excluída pelo administrador.',invalidate_ready=False)
+    db.session.commit()
+    flash('OS excluída.','success')
+    return redirect(url_for('web.orders'))
+
 @web.get('/ordens/<int:ident>')
 @login_required
 def order_detail(ident):
-    order=db.get_or_404(Order,ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user)])
+    order=get_order(ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user)])
     status_form=StatusForm(status=order.status,version=str(order.version),delivered_date=order.delivered_date or today());status_form.status.choices=[(x,x) for x in STATUSES]
     flow_form=FlowForm(version=str(order.version),action_date=today())
     if current_user.role=='admin':
@@ -227,7 +256,7 @@ def order_detail(ident):
 @web.post('/ordens/<int:ident>/fluxo')
 @login_required
 def order_flow(ident):
-    order=db.get_or_404(Order,ident)
+    order=get_order(ident)
     form=FlowForm()
     if current_user.role=='admin':
         form.action.choices += [('clear_approval','Remover aprovação'),('clear_invoice','Remover faturamento'),('clear_received','Remover recebimento')]
@@ -267,7 +296,7 @@ def order_flow(ident):
 @web.post('/ordens/<int:ident>/status')
 @login_required
 def order_status(ident):
-    order=db.get_or_404(Order,ident)
+    order=get_order(ident)
     form=StatusForm();form.status.choices=[(x,x) for x in STATUSES]
     if not form.validate_on_submit():abort(400,description='Status ou data inválidos.')
     if request.form.get('version')!=str(order.version):abort(409,description='A OS foi alterada. Atualize a página.')
@@ -304,7 +333,7 @@ def order_status(ident):
 @web.post('/ordens/<int:ident>/checklist')
 @login_required
 def checklist(ident):
-    order=db.get_or_404(Order,ident);mutable(order)
+    order=get_order(ident);mutable(order)
     stage=request.form.get('stage')
     if stage not in ['entrada','saida']:abort(400)
     for check in order.checks:
@@ -320,7 +349,7 @@ def checklist(ident):
 @web.post('/ordens/<int:ident>/itens')
 @login_required
 def item_add(ident):
-    order=db.get_or_404(Order,ident);mutable(order);form=ItemForm()
+    order=get_order(ident);mutable(order);form=ItemForm()
     if not form.validate_on_submit():
         flash('Confira descrição, quantidade e valor do item.','error');return redirect(url_for('web.order_detail',ident=ident))
     item=Item(order=order);form.populate_obj(item)
@@ -330,7 +359,7 @@ def item_add(ident):
 @web.route('/ordens/<int:ident>/itens/<int:item_id>/editar',methods=['GET','POST'])
 @login_required
 def item_edit(ident,item_id):
-    order=db.get_or_404(Order,ident);item=db.get_or_404(Item,item_id)
+    order=get_order(ident);item=db.get_or_404(Item,item_id)
     if item.order_id!=ident:abort(404)
     if order.closed:abort(409,description='Reabra a OS antes de editar.')
     form=ItemForm(obj=item)
@@ -348,7 +377,7 @@ def item_edit(ident,item_id):
 @web.post('/ordens/<int:ident>/itens/<int:item_id>/acao')
 @login_required
 def item_action(ident,item_id):
-    order=db.get_or_404(Order,ident);mutable(order);item=db.get_or_404(Item,item_id)
+    order=get_order(ident);mutable(order);item=db.get_or_404(Item,item_id)
     if item.order_id!=ident:abort(404)
     action=request.form.get('action')
     if action=='remove':
@@ -371,7 +400,7 @@ def configure_photos():
 @login_required
 @limiter.limit('20 per hour')
 def photo_add(ident):
-    order=db.get_or_404(Order,ident);mutable(order)
+    order=get_order(ident);mutable(order)
     if not current_app.config['CLOUDINARY_URL']:
         flash('Configure o armazenamento de fotos para habilitar os anexos.','error');return redirect(url_for('web.order_detail',ident=ident))
     form=PhotoForm()
@@ -406,6 +435,7 @@ def photo_add(ident):
 @login_required
 def photo_view(ident):
     photo=db.get_or_404(Photo,ident)
+    if photo.order.deleted_at:abort(404)
     if not current_app.config['CLOUDINARY_URL']:abort(404)
     import cloudinary
     import cloudinary.utils
@@ -467,7 +497,7 @@ def report_export():
 @web.get('/ordens/<int:ident>/imprimir')
 @login_required
 def order_print(ident):
-    return render_template('print.html',order=db.get_or_404(Order,ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),selectinload(Order.checks)]))
+    return render_template('print.html',order=get_order(ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),selectinload(Order.checks)]))
 
 @web.get('/usuarios')
 @admin_required

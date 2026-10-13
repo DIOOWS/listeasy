@@ -44,6 +44,7 @@ class Client(db.Model):
     address = db.Column(db.String(300), default='')
     notes = db.Column(db.Text, default='')
     active = db.Column(db.Boolean, nullable=False, default=True)
+    deleted_at = db.Column(db.DateTime, index=True)
 
 class Vehicle(db.Model):
     __tablename__ = 'ecs_vehicles'
@@ -83,6 +84,7 @@ class Order(db.Model):
     discount = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal('0'))
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    deleted_at = db.Column(db.DateTime, index=True)
     version = db.Column(db.Integer, nullable=False, default=1)
     __mapper_args__ = {'version_id_col': version}
     __table_args__ = (db.CheckConstraint('mileage >= 0 AND discount >= 0', name='ecs_order_nonnegative'), db.CheckConstraint('due_date >= entry_date', name='ecs_order_dates'))
