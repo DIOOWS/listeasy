@@ -65,6 +65,6 @@ class FlowForm(FlaskForm):
 class UserForm(FlaskForm):
     username = StringField('Usuário (login)', validators=[DataRequired(), Length(min=3,max=80), Regexp(r'^[a-zA-Z0-9_.-]+$', message='Use letras, números, ponto, hífen ou sublinhado.')])
     name = StringField('Nome', validators=[DataRequired(), Length(max=120)])
-    password = PasswordField('Senha (mínimo 12 caracteres; vazio mantém a atual)', validators=[Optional(), Length(min=12,max=128)])
+    password = PasswordField('Senha (mínimo 6 caracteres; vazio mantém a atual)', validators=[Optional(), Length(min=6,max=128)])
     role = SelectField('Perfil', choices=[('equipe','Equipe'),('admin','Administrador')])
     active = BooleanField('Usuário ativo', default=True)

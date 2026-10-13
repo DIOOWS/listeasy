@@ -514,6 +514,7 @@ def users():
 def user_form(ident=None):
     obj=db.get_or_404(User,ident) if ident else User()
     form=UserForm(obj=obj if ident else None)
+    if not ident:form.password.label.text='Senha (mínimo 6 caracteres)'
     if form.validate_on_submit():
         username=form.username.data.strip().lower()
         if not ident and not form.password.data:form.password.errors.append('Defina a senha inicial.')

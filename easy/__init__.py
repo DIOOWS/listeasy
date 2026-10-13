@@ -126,8 +126,8 @@ def create_app(config=None):
     def create_admin(username,name,password):
         import re
         username=username.strip().lower()
-        if not re.fullmatch(r'[a-z0-9_.-]{3,80}',username) or not name.strip() or len(name)>120 or not 12<=len(password)<=128:
-            raise click.ClickException('Usuário inválido ou senha fora do intervalo 12–128 caracteres.')
+        if not re.fullmatch(r'[a-z0-9_.-]{3,80}',username) or not name.strip() or len(name)>120 or not 6<=len(password)<=128:
+            raise click.ClickException('Usuário inválido ou senha fora do intervalo 6–128 caracteres.')
         if db.session.scalar(db.select(User).where(User.username==username)):
             raise click.ClickException('Usuário já existe. Use reset-password para trocar a senha.')
         user=User(username=username,name=name.strip(),role='admin')
@@ -138,7 +138,7 @@ def create_app(config=None):
     @click.option('--password',prompt=True,hide_input=True,confirmation_prompt=True)
     def reset_password(username,password):
         user=db.session.scalar(db.select(User).where(User.username==username.strip().lower()))
-        if not user or not 12<=len(password)<=128:
+        if not user or not 6<=len(password)<=128:
             raise click.ClickException('Usuário não encontrado ou senha inválida.')
         user.set_password(password);user.failures=0;user.locked_until=None;user.session_version+=1
         db.session.commit();click.echo('Senha atualizada. Sessões anteriores revogadas.')
