@@ -30,22 +30,20 @@ def get_order(ident,**kwargs):
     if order.deleted_at:abort(404)
     return order
 
-def event(order,message,invalidate_ready=True):
+def event(order,message,invalidate_ready=False):
     stamp=utcnow()
-    if invalidate_ready and order.status=='Pronto para entrega':
-        order.status='Em serviço'
-        order.ready_date=None;order.ready_at=None
-        order.status_changed_at=stamp;order.started_at=stamp
-        db.session.add(Event(order=order,user_id=current_user.id,created_at=stamp,description='OS retornou a Em serviço após alteração da ficha.'))
     db.session.add(Event(order=order,user_id=current_user.id,created_at=stamp,description=message))
     order.updated_at=stamp
 
 def mutable(order):
-    if order.closed:
-        abort(409,description='OS encerrada. Reabra a OS antes de alterar os dados.')
     submitted=request.form.get('version')
     if submitted is None or submitted!=str(order.version):
         abort(409,description='A OS foi alterada. Atualize a página e tente novamente.')
+
+def keep_discount_valid(order,subtotal):
+    if order.discount>subtotal:
+        previous=order.discount;order.discount=max(subtotal,Decimal('0'))
+        event(order,f'Desconto histórico ajustado de {previous} para {order.discount} após alteração dos itens.')
 
 def order_choices(form,order=None):
     condition=Client.active.is_(True) & Client.deleted_at.is_(None)
@@ -76,8 +74,6 @@ def populate_order(form,order):
 def validate_order(form,order=None):
     if form.due_date.data and form.entry_date.data and form.due_date.data<form.entry_date.data:
         form.due_date.errors.append('A entrega prevista deve ser igual ou posterior à entrada.');return False
-    if order and form.entry_date.data and any(value and value<form.entry_date.data for value in [order.approved_date, order.started_date, order.ready_date, order.delivered_date, order.invoiced_date, order.received_date]):
-        form.entry_date.errors.append('A entrada não pode ser posterior às etapas já registradas.');return False
     client=db.session.get(Client,form.client_id.data)
     if not client or (not client.active and (not order or order.client_id!=client.id)):
         form.client_id.errors.append('Selecione um cliente ativo.');return False
@@ -121,8 +117,8 @@ def logout():
 @web.get('/')
 @login_required
 def dashboard():
-    active=Order.deleted_at.is_(None) & ~Order.status.in_(['Entregue','Cancelada'])
-    pending_finance=Order.deleted_at.is_(None) & (Order.status=='Entregue') & Order.received_date.is_(None)
+    active=Order.deleted_at.is_(None) & ~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada'])
+    pending_finance=Order.deleted_at.is_(None) & Order.status.in_(['Entregue','Faturado']) & Order.received_date.is_(None)
     day=today()
     totals=db.session.execute(db.select(
         func.count(case((active,1))),
@@ -189,10 +185,10 @@ def filtered_orders():
     q=request.args.get('q','').strip()[:150];status=request.args.get('status','')
     if q:query=query.where(or_(Order.number.ilike('%'+q+'%'),func.coalesce(Order.vehicle_plate,Vehicle.plate).ilike('%'+q+'%'),func.coalesce(Order.vehicle_fleet,Vehicle.fleet).ilike('%'+q+'%'),Client.name.ilike('%'+q+'%')))
     if status in STATUSES:query=query.where(Order.status==status)
-    if request.args.get('open')=='1':query=query.where(~Order.status.in_(['Entregue','Cancelada']))
-    if request.args.get('finance')=='1':query=query.where(Order.status=='Entregue',Order.received_date.is_(None))
-    if request.args.get('due')=='today':query=query.where(Order.due_date==today(),~Order.status.in_(['Entregue','Cancelada']))
-    if request.args.get('due')=='late':query=query.where(Order.due_date<today(),~Order.status.in_(['Entregue','Cancelada']))
+    if request.args.get('open')=='1':query=query.where(~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada']))
+    if request.args.get('finance')=='1':query=query.where(Order.status.in_(['Entregue','Faturado']),Order.received_date.is_(None))
+    if request.args.get('due')=='today':query=query.where(Order.due_date==today(),~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada']))
+    if request.args.get('due')=='late':query=query.where(Order.due_date<today(),~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada']))
     for key,operator in [('start',lambda d:Order.entry_date>=d),('end',lambda d:Order.entry_date<=d)]:
         raw=request.args.get(key)
         if raw:
@@ -228,7 +224,6 @@ def order_new():
 @login_required
 def order_edit(ident):
     order=get_order(ident)
-    if order.closed:abort(409,description='Reabra a OS antes de editar.')
     form=OrderForm(obj=order);order_choices(form,order)
     if request.method=='GET':form.version.data=str(order.version)
     if form.validate_on_submit():
@@ -261,91 +256,49 @@ def order_detail(ident):
         flow_form.action.choices += [('clear_approval','Corrigir: remover aprovação'),('clear_invoice','Corrigir: remover faturamento'),('clear_received','Corrigir: remover recebimento')]
     return render_template('order.html',order=order,status_form=status_form,flow_form=flow_form,item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
 
+def record_status(order,target,day=None,reference=''):
+    stamp=utcnow();day=day or today();previous=order.status
+    fields={'Aprovado':'approved','Em serviço':'started','Pronto para entrega':'ready',
+            'Entregue':'delivered','Faturado':'invoiced','Recebido':'received'}
+    if target=='Aguardando avaliação':order.entered_at=stamp
+    prefix=fields.get(target)
+    if prefix:
+        setattr(order,prefix+'_date',day);setattr(order,prefix+'_at',stamp)
+    # Preserve other movement records. A selection never clears another step.
+    order.status=target;order.status_changed_at=stamp
+    event(order,f'Status: {previous} → {target}.'+(f' Observação: {reference}' if reference else ''))
+
 @web.post('/ordens/<int:ident>/fluxo')
 @login_required
 def order_flow(ident):
-    order=get_order(ident)
-    form=FlowForm()
+    order=get_order(ident);form=FlowForm()
     if current_user.role=='admin':
         form.action.choices += [('clear_approval','Remover aprovação'),('clear_invoice','Remover faturamento'),('clear_received','Remover recebimento')]
-    if not form.validate_on_submit():abort(400,description='Etapa ou data inválida.')
-    if form.version.data!=str(order.version):abort(409,description='A OS foi alterada. Atualize a página e tente novamente.')
-    action=form.action.data;value=form.action_date.data or today();reference=(form.reference.data or '').strip()
-    def fail(message):
-        flash(message,'error');return redirect(url_for('web.order_detail',ident=ident))
-    if order.status=='Cancelada':return fail('Uma OS cancelada não pode receber novas etapas. Reabra a OS primeiro.')
-    if (order.entry_date and value<order.entry_date) or value>today():return fail('A data deve estar entre a entrada e hoje.')
-    fields={'approve':('approved_date','Aprovação'),'invoice':('invoiced_date','Faturamento'),'receive':('received_date','Recebimento')}
+    if not form.validate_on_submit():abort(400,description='Confira a etapa selecionada.')
+    mutable(order)
+    action=form.action.data;reference=(form.reference.data or '').strip()
     if action.startswith('clear_'):
         if current_user.role!='admin':abort(403)
-        if not reference:return fail('Informe o motivo da correção na observação.')
-        field,label={'clear_approval':('approved_date','Aprovação'),'clear_invoice':('invoiced_date','Faturamento'),'clear_received':('received_date','Recebimento')}[action]
-        if action=='clear_invoice' and order.received_date:return fail('Remova o recebimento antes de corrigir o faturamento.')
-        previous=getattr(order,field)
-        if not previous:return fail('Esta etapa ainda não foi registrada.')
-        setattr(order,field,None)
-        setattr(order,field.replace('_date','_at'),None)
-        message=f'{label} removido para correção (data anterior {previous:%d/%m/%Y}). Motivo: {reference}'
+        field={'clear_approval':'approved','clear_invoice':'invoiced','clear_received':'received'}[action]
+        setattr(order,field+'_date',None);setattr(order,field+'_at',None)
+        event(order,f'Registro {field} removido.'+(f' Observação: {reference}' if reference else ''))
     else:
-        field,label=fields[action]
-        if getattr(order,field):return fail('Esta etapa já está registrada. Um administrador pode corrigir o registro.')
-        if action=='approve':
-            if any(d and value>d for d in [order.started_date,order.ready_date,order.delivered_date]):return fail('A aprovação não pode ser posterior ao início do serviço ou à entrega já registrada.')
-        elif action=='invoice':
-            if order.status!='Entregue' or not order.delivered_date:return fail('Registre a entrega antes do faturamento.')
-            if value<order.delivered_date:return fail('O faturamento não pode ser anterior à entrega.')
-        elif action=='receive':
-            if order.status!='Entregue' or not order.invoiced_date:return fail('Registre o faturamento antes do recebimento.')
-            if value<order.invoiced_date:return fail('O recebimento não pode ser anterior ao faturamento.')
-        setattr(order,field,value)
-        setattr(order,field.replace('_date','_at'),utcnow())
-        message=f'{label} registrado em {value:%d/%m/%Y}.'+(f' Referência: {reference}' if reference else '')
-    event(order,message,invalidate_ready=False);db.session.commit()
-    flash('Fluxo atualizado.','success');return redirect(url_for('web.order_detail',ident=ident))
+        target={'approve':'Aprovado','invoice':'Faturado','receive':'Recebido'}[action]
+        record_status(order,target,form.action_date.data,reference)
+    db.session.commit();flash('Fluxo atualizado.','success')
+    return redirect(url_for('web.order_detail',ident=ident))
 
 @web.post('/ordens/<int:ident>/status')
 @login_required
 def order_status(ident):
-    order=get_order(ident)
-    form=StatusForm();form.status.choices=[(x,x) for x in STATUSES]
-    if not form.validate_on_submit():abort(400,description='Status ou data inválidos.')
-    if request.form.get('version')!=str(order.version):abort(409,description='A OS foi alterada. Atualize a página.')
+    order=get_order(ident);form=StatusForm();form.status.choices=[(x,x) for x in STATUSES]
+    if not form.validate_on_submit():abort(400,description='Confira o status selecionado.')
+    mutable(order)
     target=form.status.data
-    if order.closed and current_user.role!='admin':abort(403)
-    if target==order.status:return redirect(url_for('web.order_detail',ident=ident))
-    if target in ['Em serviço','Pronto para entrega'] and order.entry_date and order.entry_date>today():
-        flash('A entrada precisa ter ocorrido antes de iniciar ou concluir o atendimento.','error');return redirect(url_for('web.order_detail',ident=ident))
-    if order.invoiced_date or order.received_date:
-        flash('Corrija os registros financeiros antes de reabrir ou cancelar esta OS.','error');return redirect(url_for('web.order_detail',ident=ident))
-    if target in ['Pronto para entrega','Entregue']:
-        services=[x for x in order.items if x.kind=='servico']
-        if not services or not all(x.done for x in services):
-            flash('Adicione e conclua todos os serviços antes de liberar o veículo.','error');return redirect(url_for('web.order_detail',ident=ident))
-        if any(x.result=='pendente' for x in order.checks if x.stage=='entrada'):
-            flash('Finalize o checklist de entrada antes de liberar o veículo.','error');return redirect(url_for('web.order_detail',ident=ident))
-        if any(x.result!='ok' for x in order.checks if x.stage=='saida'):
-            flash('Todos os itens do checklist de entrega devem estar OK.','error');return redirect(url_for('web.order_detail',ident=ident))
-    if target=='Entregue':
-        delivery=form.delivered_date.data or today()
-        if (order.entry_date and delivery<order.entry_date) or delivery>today():
-            flash('A entrega deve ser entre a entrada e a data de hoje.','error');return redirect(url_for('web.order_detail',ident=ident))
-        if any(d and delivery<d for d in [order.approved_date,order.started_date,order.ready_date]):
-            flash('A entrega não pode ser anterior às etapas já registradas.','error');return redirect(url_for('web.order_detail',ident=ident))
-        order.delivered_date=delivery
-        order.delivered_at=utcnow()
-    else:
-        order.delivered_date=None
-        order.delivered_at=None
-    if target=='Em serviço':
-        if not order.started_date:order.started_date=today()
-        order.started_at=utcnow()
-    if target=='Pronto para entrega':
-        order.ready_date=today();order.ready_at=utcnow()
-    elif target!='Entregue':
-        order.ready_date=None;order.ready_at=None
-    previous=order.status;order.status=target;order.status_changed_at=utcnow()
-    event(order,f'Status: {previous} → {target}'+(f'. Entrega em {order.delivered_date:%d/%m/%Y}.' if order.delivered_date else '.'),invalidate_ready=False)
-    db.session.commit();flash('Status atualizado.','success');return redirect(url_for('web.order_detail',ident=ident))
+    day=form.delivered_date.data if target=='Entregue' else None
+    record_status(order,target,day)
+    db.session.commit();flash('Fluxo atualizado.','success')
+    return redirect(url_for('web.order_detail',ident=ident))
 
 @web.post('/ordens/<int:ident>/checklist')
 @login_required
@@ -357,8 +310,6 @@ def checklist(ident):
         if check.stage!=stage:continue
         result=request.form.get(f'result_{check.id}','pendente');notes=request.form.get(f'notes_{check.id}','').strip()
         if result not in (['pendente','ok','avaria','na'] if stage=='entrada' else ['pendente','ok']) or len(notes)>500:abort(400)
-        if result=='avaria' and not notes:
-            flash('Descreva as avarias nos itens marcados com atenção.','error');db.session.rollback();return redirect(url_for('web.order_detail',ident=ident))
         check.result=result;check.notes=notes
     event(order,f'Checklist de {"entrada" if stage=="entrada" else "entrega"} atualizado.');db.session.commit()
     flash('Checklist salvo.','success');return redirect(url_for('web.order_detail',ident=ident))
@@ -392,7 +343,6 @@ def item_add(ident):
 def item_edit(ident,item_id):
     order=get_order(ident);item=db.get_or_404(Item,item_id)
     if item.order_id!=ident:abort(404)
-    if order.closed:abort(409,description='Reabra a OS antes de editar.')
     if item.service_type:
         form=ServiceForm(obj=item)
         if request.method=='GET':form.version.data=str(order.version)
@@ -410,22 +360,20 @@ def item_edit(ident,item_id):
     if form.validate_on_submit():
         mutable(order)
         proposed=(form.quantity.data*form.unit_price.data).quantize(Decimal('0.01'),rounding=ROUND_HALF_UP)
-        if order.subtotal()-item.total+proposed<order.discount:
-            form.unit_price.errors.append('O subtotal não pode ficar abaixo do desconto.')
-        else:
-            form.populate_obj(item);event(order,f'Item atualizado: {item.description}.');db.session.commit()
-            flash('Item atualizado.','success');return redirect(url_for('web.order_detail',ident=ident))
+        keep_discount_valid(order,order.subtotal()-item.total+proposed)
+        form.populate_obj(item);event(order,f'Item atualizado: {item.description}.');db.session.commit()
+        flash('Item atualizado.','success');return redirect(url_for('web.order_detail',ident=ident))
     return render_template('form.html',form=form,title='Editar serviço / peça',back=url_for('web.order_detail',ident=ident))
 
 @web.post('/ordens/<int:ident>/itens/<int:item_id>/acao')
 @login_required
 def item_action(ident,item_id):
-    order=get_order(ident);mutable(order);item=db.get_or_404(Item,item_id)
+    order=get_order(ident);mutable(order);item=db.session.get(Item,item_id)
+    if item is None:abort(404,description='Este serviço já foi excluído ou não está mais disponível. Atualize a OS.')
     if item.order_id!=ident:abort(404)
     action=request.form.get('action')
     if action=='remove':
-        if order.subtotal()-item.total<order.discount:
-            flash('O valor dos itens não pode ficar abaixo do desconto registrado nesta OS antiga.','error');return redirect(url_for('web.order_detail',ident=ident))
+        keep_discount_valid(order,order.subtotal()-item.total)
         event(order,f'Item removido: {item.description}.');db.session.delete(item)
     elif action=='toggle':
         item.done=not item.done;event(order,f'Item {"concluído" if item.done else "reaberto"}: {item.description}.')

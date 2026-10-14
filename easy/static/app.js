@@ -5,7 +5,9 @@
  const TTL=15000;
  const authenticated=()=>document.body.classList.contains('authenticated');
  const key=url=>{const u=new URL(url,location.href);return u.pathname+u.search;};
- const formKey=form=>key(form.action)+'|'+form.method+'|'+(form.elements.namedItem('stage')?.value||'');
+ const formURL=form=>new URL(form.getAttribute('action')||location.href,location.href).href;
+ const formMethod=form=>(form.getAttribute('method')||'get').toLowerCase();
+ const formKey=form=>key(formURL(form))+'|'+formMethod(form)+'|'+(form.elements.namedItem('stage')?.value||'');
  function activate(tab){
   document.querySelectorAll('[data-tab]').forEach(button=>{const active=button===tab;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
   document.querySelectorAll('[data-panel]').forEach(panel=>panel.hidden=panel.id!==tab.dataset.tab);
@@ -127,11 +129,11 @@
   if(button){button.disabled=true;button.setAttribute('aria-busy','true');if(button.classList.contains('icon-button'))button.innerHTML='<span class="button-spinner" aria-hidden="true"></span>';else button.textContent='Salvando…';}
   notice(form,'Salvando…');
   try{
-   const page=await readPage(form.action||location.href,{method:'POST',body:data});
+   const page=await readPage(formURL(form),{method:'POST',body:data});
    const doc=new DOMParser().parseFromString(page.html,'text/html');
    const error=doc.querySelector('main .alert.error, main .error-text');
    if(error)throw Error(error.textContent.trim());
-   if(authenticated()&&!doc.body.classList.contains('authenticated')&&key(form.action)!=='/logout'){
+   if(authenticated()&&!doc.body.classList.contains('authenticated')&&key(formURL(form))!=='/logout'){
     notice(form,'Sua sessão expirou. Entre novamente para salvar.',true);
     const login=document.createElement('a');login.href='/login';login.textContent='Entrar novamente';form.querySelector('.request-message').append(' ',login);return;
    }
@@ -176,11 +178,11 @@
  document.addEventListener('submit',event=>{
   const form=event.target;
   if(event.defaultPrevented||!(form instanceof HTMLFormElement))return;
-  if(form.target&&form.target!=='_self')return;
-  const url=new URL(form.action||location.href,location.href);
+  if(form.getAttribute('target')&&form.getAttribute('target')!=='_self')return;
+  const url=new URL(formURL(form));
   if(url.origin!==location.origin)return;
   event.preventDefault();
-  if(form.method.toLowerCase()==='post')submit(form,event.submitter);
+  if(formMethod(form)==='post')submit(form,event.submitter);
   else{url.search=new URLSearchParams(new FormData(form)).toString();navigate(url.href);}
  });
  document.addEventListener('keydown',event=>{

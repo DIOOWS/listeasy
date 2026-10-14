@@ -5,7 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
-STATUSES = ['Aguardando avaliação', 'Aguardando aprovação', 'Aguardando peças', 'Em serviço', 'Pronto para entrega', 'Entregue', 'Cancelada']
+STATUSES = ['Aguardando avaliação', 'Aguardando aprovação', 'Aprovado', 'Aguardando peças', 'Em serviço', 'Pronto para entrega', 'Entregue', 'Faturado', 'Recebido', 'Cancelada']
 ENTRY_CHECKS = ['Quilometragem registrada', 'Pneus e rodas', 'Lataria e avarias', 'Luzes e sinalização', 'Acessórios e documentos', 'Estado interno do veículo']
 EXIT_CHECKS = ['Serviços executados e conferidos', 'Funcionamento testado', 'Veículo liberado pelo responsável']
 
@@ -114,13 +114,10 @@ class Order(db.Model):
     @property
     def status_tone(self):
         return {'Aguardando avaliação':'gray', 'Aguardando aprovação':'amber',
-                'Aguardando peças':'orange', 'Em serviço':'blue',
+                'Aguardando peças':'orange', 'Em serviço':'blue', 'Aprovado':'blue', 'Faturado':'purple', 'Recebido':'green',
                 'Pronto para entrega':'teal', 'Entregue':'green', 'Cancelada':'red'}.get(self.status,'gray')
     @property
     def flow_tone(self):
-        if self.status=='Cancelada':return 'red'
-        if self.received_date:return 'green'
-        if self.invoiced_date:return 'purple'
         return self.status_tone
     def subtotal(self, kind=None):
         return sum((x.total for x in self.items if kind is None or x.kind == kind), Decimal('0')).quantize(Decimal('0.01'))
@@ -129,7 +126,7 @@ class Order(db.Model):
         return (self.subtotal() - self.discount).quantize(Decimal('0.01'))
     @property
     def closed(self):
-        return self.status in ['Entregue', 'Cancelada']
+        return self.status in ['Entregue', 'Faturado', 'Recebido', 'Cancelada']
     @property
     def service_progress(self):
         services = [x for x in self.items if x.kind == 'servico']
@@ -137,44 +134,24 @@ class Order(db.Model):
 
     @property
     def flow_steps(self):
-        # Existing OS keep their known status; missing historical dates stay unknown.
-        service_done = bool(self.started_date) or self.status in ['Pronto para entrega', 'Entregue']
-        ready_done = self.status in ['Pronto para entrega', 'Entregue']
-        steps = [
-            ('Entrada', self.entry_date, True),
-            ('Aprovação', self.approved_date, bool(self.approved_date)),
-            ('Em serviço', self.started_date, service_done),
-            ('Pronto', self.ready_date, ready_done),
-            ('Entregue', self.delivered_date, self.status == 'Entregue'),
-            ('Faturado', self.invoiced_date, bool(self.invoiced_date)),
-            ('Recebido', self.received_date, bool(self.received_date)),
-        ]
-        if self.status == 'Cancelada' or self.received_date:
-            current = None
-        elif self.invoiced_date:
-            current = 6
-        elif self.status == 'Entregue':
-            current = 5
-        elif self.status == 'Pronto para entrega':
-            current = 3
-        elif self.status in ['Em serviço', 'Aguardando peças']:
-            current = 2
-        elif self.approved_date:
-            current = 2
-        else:
-            current = 1
-        timestamps=[self.entered_at,self.approved_at,self.started_at,self.ready_at,self.delivered_at,self.invoiced_at,self.received_at]
-        return [dict(label=label, date=value, timestamp=timestamps[index],
-                     state='current' if index == current else 'done' if done else 'pending')
-                for index, (label, value, done) in enumerate(steps)]
+        steps=[
+            ('Entrada',self.entry_date,self.entered_at,True),
+            ('Aprovação',self.approved_date,self.approved_at,bool(self.approved_date or self.approved_at)),
+            ('Em serviço',self.started_date,self.started_at,bool(self.started_date or self.started_at)),
+            ('Pronto',self.ready_date,self.ready_at,bool(self.ready_date or self.ready_at)),
+            ('Entregue',self.delivered_date,self.delivered_at,bool(self.delivered_date or self.delivered_at)),
+            ('Faturado',self.invoiced_date,self.invoiced_at,bool(self.invoiced_date or self.invoiced_at)),
+            ('Recebido',self.received_date,self.received_at,bool(self.received_date or self.received_at))]
+        # The selected status is the current step. No later step implies earlier ones.
+        current={'Aguardando avaliação':0,'Aguardando aprovação':1,'Aprovado':1,
+                 'Aguardando peças':2,'Em serviço':2,'Pronto para entrega':3,
+                 'Entregue':4,'Faturado':5,'Recebido':6}.get(self.status)
+        return [dict(label=label,date=day,timestamp=self.status_changed_at if index==current and self.status_changed_at else stamp,
+                     state='current' if index==current else 'done' if done else 'pending')
+                for index,(label,day,stamp,done) in enumerate(steps)]
 
     @property
     def flow_label(self):
-        if self.status == 'Cancelada': return 'Cancelada'
-        if self.received_date: return 'Recebido'
-        if self.invoiced_date: return 'Faturado'
-        if self.approved_date and self.status in ['Aguardando avaliação', 'Aguardando aprovação']:
-            return 'Aprovado · aguardando início'
         return self.status
 
 class Item(db.Model):
