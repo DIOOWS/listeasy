@@ -41,6 +41,12 @@ class ItemForm(FlaskForm):
     done = BooleanField('Serviço concluído / peça utilizada')
     version = HiddenField()
 
+class ServiceForm(FlaskForm):
+    service_type = SelectField('Tipo do serviço', choices=[('refrigeracao','Refrigeração'),('estrutura','Estrutura')])
+    used_parts = TextAreaField('Peças utilizadas', validators=[Optional(), Length(max=5000)], render_kw={'placeholder':'Escreva as peças utilizadas'})
+    responsible = StringField('Profissional responsável', validators=[Optional(), Length(max=120)], render_kw={'placeholder':'Nome do profissional'})
+    version = HiddenField()
+
 class StatusForm(FlaskForm):
     status = SelectField('Novo status')
     delivered_date = DateField('Data real da entrega (vazio = hoje)', validators=[Optional()])

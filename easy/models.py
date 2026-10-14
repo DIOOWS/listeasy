@@ -75,6 +75,14 @@ class Order(db.Model):
     ready_date = db.Column(db.Date)
     invoiced_date = db.Column(db.Date)
     received_date = db.Column(db.Date)
+    entered_at = db.Column(db.DateTime)
+    approved_at = db.Column(db.DateTime)
+    started_at = db.Column(db.DateTime)
+    ready_at = db.Column(db.DateTime)
+    delivered_at = db.Column(db.DateTime)
+    invoiced_at = db.Column(db.DateTime)
+    received_at = db.Column(db.DateTime)
+    status_changed_at = db.Column(db.DateTime)
     mileage = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(40), nullable=False, default=STATUSES[0], index=True)
     responsible = db.Column(db.String(120), nullable=False)
@@ -155,7 +163,8 @@ class Order(db.Model):
             current = 2
         else:
             current = 1
-        return [dict(label=label, date=value,
+        timestamps=[self.entered_at,self.approved_at,self.started_at,self.ready_at,self.delivered_at,self.invoiced_at,self.received_at]
+        return [dict(label=label, date=value, timestamp=timestamps[index],
                      state='current' if index == current else 'done' if done else 'pending')
                 for index, (label, value, done) in enumerate(steps)]
 
@@ -174,6 +183,8 @@ class Item(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey('ecs_orders.id'), nullable=False, index=True)
     kind = db.Column(db.String(15), nullable=False)
     description = db.Column(db.String(200), nullable=False)
+    service_type = db.Column(db.String(20))
+    used_parts = db.Column(db.Text, default='')
     quantity = db.Column(db.Numeric(10, 2), nullable=False, default=1)
     unit_price = db.Column(db.Numeric(12, 2), nullable=False)
     responsible = db.Column(db.String(120), default='')

@@ -70,7 +70,7 @@ def create_app(config=None):
         return value.strftime('%d/%m/%Y') if value else '—'
     @app.template_filter('localtime')
     def localtime(value):
-        return value.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
+        return value.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M:%S')
     @app.after_request
     def secure_headers(response):
         response.headers['X-Content-Type-Options']='nosniff'

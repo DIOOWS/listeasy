@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db, limiter, today
 from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, ENTRY_CHECKS, EXIT_CHECKS, utcnow
-from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm
+from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm, ServiceForm
 
 web=Blueprint('web',__name__)
 DUMMY_HASH=generate_password_hash('dummy-password-never-a-login')
@@ -31,12 +31,14 @@ def get_order(ident,**kwargs):
     return order
 
 def event(order,message,invalidate_ready=True):
+    stamp=utcnow()
     if invalidate_ready and order.status=='Pronto para entrega':
         order.status='Em serviço'
-        order.ready_date=None
-        db.session.add(Event(order=order,user_id=current_user.id,description='OS retornou a Em serviço após alteração da ficha.'))
-    db.session.add(Event(order=order,user_id=current_user.id,description=message))
-    order.updated_at=utcnow()
+        order.ready_date=None;order.ready_at=None
+        order.status_changed_at=stamp;order.started_at=stamp
+        db.session.add(Event(order=order,user_id=current_user.id,created_at=stamp,description='OS retornou a Em serviço após alteração da ficha.'))
+    db.session.add(Event(order=order,user_id=current_user.id,created_at=stamp,description=message))
+    order.updated_at=stamp
 
 def mutable(order):
     if order.closed:
@@ -210,7 +212,9 @@ def order_new():
     form=OrderForm()
     order_choices(form)
     if form.validate_on_submit() and validate_order(form):
-        order=Order();populate_order(form,order);order.number=(form.number.data or '').strip().upper() or None
+        order=Order();populate_order(form,order);order.entered_at=utcnow();order.status_changed_at=order.entered_at
+        if not order.entry_date:order.entry_date=today()
+        order.number=(form.number.data or '').strip().upper() or None
         db.session.add(order);db.session.flush()
         if not order.number:order.number=f'OS-{order.created_at.year}-{order.id:06d}'
         for stage,labels in [('entrada',ENTRY_CHECKS),('saida',EXIT_CHECKS)]:
@@ -255,7 +259,7 @@ def order_detail(ident):
     flow_form=FlowForm(version=str(order.version),action_date=today())
     if current_user.role=='admin':
         flow_form.action.choices += [('clear_approval','Corrigir: remover aprovação'),('clear_invoice','Corrigir: remover faturamento'),('clear_received','Corrigir: remover recebimento')]
-    return render_template('order.html',order=order,status_form=status_form,flow_form=flow_form,item_form=ItemForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
+    return render_template('order.html',order=order,status_form=status_form,flow_form=flow_form,item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
 
 @web.post('/ordens/<int:ident>/fluxo')
 @login_required
@@ -280,6 +284,7 @@ def order_flow(ident):
         previous=getattr(order,field)
         if not previous:return fail('Esta etapa ainda não foi registrada.')
         setattr(order,field,None)
+        setattr(order,field.replace('_date','_at'),None)
         message=f'{label} removido para correção (data anterior {previous:%d/%m/%Y}). Motivo: {reference}'
     else:
         field,label=fields[action]
@@ -293,6 +298,7 @@ def order_flow(ident):
             if order.status!='Entregue' or not order.invoiced_date:return fail('Registre o faturamento antes do recebimento.')
             if value<order.invoiced_date:return fail('O recebimento não pode ser anterior ao faturamento.')
         setattr(order,field,value)
+        setattr(order,field.replace('_date','_at'),utcnow())
         message=f'{label} registrado em {value:%d/%m/%Y}.'+(f' Referência: {reference}' if reference else '')
     event(order,message,invalidate_ready=False);db.session.commit()
     flash('Fluxo atualizado.','success');return redirect(url_for('web.order_detail',ident=ident))
@@ -326,11 +332,18 @@ def order_status(ident):
         if any(d and delivery<d for d in [order.approved_date,order.started_date,order.ready_date]):
             flash('A entrega não pode ser anterior às etapas já registradas.','error');return redirect(url_for('web.order_detail',ident=ident))
         order.delivered_date=delivery
-    else:order.delivered_date=None
-    if target=='Em serviço' and not order.started_date:order.started_date=today()
-    if target=='Pronto para entrega':order.ready_date=today()
-    elif target!='Entregue':order.ready_date=None
-    previous=order.status;order.status=target
+        order.delivered_at=utcnow()
+    else:
+        order.delivered_date=None
+        order.delivered_at=None
+    if target=='Em serviço':
+        if not order.started_date:order.started_date=today()
+        order.started_at=utcnow()
+    if target=='Pronto para entrega':
+        order.ready_date=today();order.ready_at=utcnow()
+    elif target!='Entregue':
+        order.ready_date=None;order.ready_at=None
+    previous=order.status;order.status=target;order.status_changed_at=utcnow()
     event(order,f'Status: {previous} → {target}'+(f'. Entrega em {order.delivered_date:%d/%m/%Y}.' if order.delivered_date else '.'),invalidate_ready=False)
     db.session.commit();flash('Status atualizado.','success');return redirect(url_for('web.order_detail',ident=ident))
 
@@ -350,6 +363,20 @@ def checklist(ident):
     event(order,f'Checklist de {"entrada" if stage=="entrada" else "entrega"} atualizado.');db.session.commit()
     flash('Checklist salvo.','success');return redirect(url_for('web.order_detail',ident=ident))
 
+@web.post('/ordens/<int:ident>/servicos')
+@login_required
+def service_add(ident):
+    order=get_order(ident);mutable(order);form=ServiceForm()
+    if not form.validate_on_submit():
+        abort(400,description='Confira o tipo de serviço, peças utilizadas e profissional responsável.')
+    service_type=form.service_type.data
+    title={'refrigeracao':'Refrigeração','estrutura':'Estrutura'}[service_type]
+    item=Item(order=order,kind='servico',service_type=service_type,description=title,
+              used_parts=(form.used_parts.data or '').strip(),responsible=(form.responsible.data or '').strip(),
+              quantity=1,unit_price=Decimal('0'),done=False)
+    db.session.add(item);event(order,f'Serviço {title} cadastrado.');db.session.commit()
+    flash('Serviço salvo.','success');return redirect(url_for('web.order_detail',ident=ident))
+
 @web.post('/ordens/<int:ident>/itens')
 @login_required
 def item_add(ident):
@@ -366,6 +393,18 @@ def item_edit(ident,item_id):
     order=get_order(ident);item=db.get_or_404(Item,item_id)
     if item.order_id!=ident:abort(404)
     if order.closed:abort(409,description='Reabra a OS antes de editar.')
+    if item.service_type:
+        form=ServiceForm(obj=item)
+        if request.method=='GET':form.version.data=str(order.version)
+        if form.validate_on_submit():
+            mutable(order)
+            item.service_type=form.service_type.data
+            item.description={'refrigeracao':'Refrigeração','estrutura':'Estrutura'}[form.service_type.data]
+            item.used_parts=(form.used_parts.data or '').strip()
+            item.responsible=(form.responsible.data or '').strip()
+            event(order,f'Serviço atualizado: {item.description}.');db.session.commit()
+            flash('Serviço salvo.','success');return redirect(url_for('web.order_detail',ident=ident))
+        return render_template('form.html',form=form,title='Editar serviço',back=url_for('web.order_detail',ident=ident))
     form=ItemForm(obj=item)
     if request.method=='GET':form.version.data=str(order.version)
     if form.validate_on_submit():
@@ -476,12 +515,12 @@ def report_export():
     rows=db.session.scalars(filtered_orders().options(selectinload(Order.checks)).limit(10001)).all()
     if len(rows)>10000:abort(400,description='Filtre o período para exportar até 10 mil OS.')
     book=Workbook();sheet=book.active;sheet.title='Ordens de serviço'
-    sheet.append(['OS','Cliente','Placa','Frota','Entrada','Previsão entrega','Entrega real','Status','Serviços','Peças','Desconto','Total','Aprovação','Início do serviço','Pronto','Faturamento','Recebimento','Etapa do fluxo'])
-    items=book.create_sheet('Serviços e peças');items.append(['OS','Tipo','Descrição','Quantidade','Valor unitário','Total','Responsável','Concluído'])
+    sheet.append(['OS','Cliente','Placa','Frota','Entrada','Previsão entrega','Entrega real','Status','Serviços','Peças','Desconto','Total','Aprovação','Início do serviço','Pronto','Faturamento','Recebimento','Etapa do fluxo','Registro da entrada','Registro da aprovação','Registro do início','Registro pronto','Registro da saída','Registro do faturamento','Registro do recebimento','Último movimento de status'])
+    items=book.create_sheet('Serviços e peças');items.append(['OS','Tipo','Descrição','Quantidade','Valor unitário','Total','Responsável','Concluído','Tipo de serviço','Peças utilizadas'])
     checks=book.create_sheet('Checklist');checks.append(['OS','Etapa','Item','Resultado','Observações'])
     for order in rows:
-        sheet.append([safe_cell(x) for x in [order.number,order.client.name,order.plate,order.fleet,order.entry_date,order.due_date,order.delivered_date,order.status,order.subtotal('servico'),order.subtotal('peca'),order.discount,order.total,order.approved_date,order.started_date,order.ready_date,order.invoiced_date,order.received_date,order.flow_label]])
-        for item in order.items:items.append([safe_cell(x) for x in [order.number,item.kind,item.description,item.quantity,item.unit_price,item.total,item.responsible,'Sim' if item.done else 'Não']])
+        sheet.append([safe_cell(x) for x in [order.number,order.client.name,order.plate,order.fleet,order.entry_date,order.due_date,order.delivered_date,order.status,order.subtotal('servico'),order.subtotal('peca'),order.discount,order.total,order.approved_date,order.started_date,order.ready_date,order.invoiced_date,order.received_date,order.flow_label,*[current_app.jinja_env.filters['localtime'](stamp) if stamp else '' for stamp in [order.entered_at,order.approved_at,order.started_at,order.ready_at,order.delivered_at,order.invoiced_at,order.received_at,order.status_changed_at]]]])
+        for item in order.items:items.append([safe_cell(x) for x in [order.number,item.kind,item.description,item.quantity,item.unit_price,item.total,item.responsible,'Sim' if item.done else 'Não',item.service_type or '',item.used_parts or '']])
         for check in order.checks:checks.append([safe_cell(x) for x in [order.number,check.stage,check.label,check.result,check.notes]])
     from openpyxl.styles import Font, PatternFill
     for ws in book:

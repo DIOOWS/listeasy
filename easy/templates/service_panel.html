@@ -1,0 +1,12 @@
+{% from 'macros.html' import field,action_icon %}
+<div id="items-panel" role="tabpanel" aria-labelledby="tab-items" data-panel hidden>
+<div class="heading small"><h2>Serviços e peças utilizadas</h2><span>{{ order.service_progress }}% concluídos</span></div>
+<div class="service-list">{% for item in order.items %}
+<article class="service-row"><div class="heading small"><h3>{{ item.description }}</h3><span>{{ 'Concluído' if item.done else 'Pendente' }}</span></div>
+{% if item.service_type %}<p><b>Peças utilizadas:</b> {{ item.used_parts or 'Não informadas' }}</p><p><b>Profissional responsável:</b> {{ item.responsible or 'Não informado' }}</p>
+{% else %}<p>{{ 'Serviço anterior' if item.kind=='servico' else 'Peça anterior' }} · {{ item.quantity }} × {{ item.unit_price|brl }} · <b>{{ item.total|brl }}</b></p>{% if item.responsible %}<p>Profissional: {{ item.responsible }}</p>{% endif %}{% endif %}
+{% if not order.closed %}<div class="actions"><a class="icon-button" href="{{ url_for('web.item_edit',ident=order.id,item_id=item.id) }}" aria-label="Editar {{ item.description }}" title="Editar serviço">{{ action_icon('edit') }}</a><form method="post" action="{{ url_for('web.item_action',ident=order.id,item_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ order.version }}"><button class="button secondary" name="action" value="toggle">{{ 'Reabrir' if item.done else 'Concluir' }}</button><button class="icon-button" name="action" value="remove" aria-label="Excluir {{ item.description }}" title="Excluir serviço" data-confirm="Excluir este serviço da OS?">{{ action_icon('delete') }}</button></form></div>{% endif %}</article>
+{% else %}<p class="empty">Nenhum serviço registrado.</p>{% endfor %}</div>
+{% if not order.closed %}<h2>Registrar serviço</h2><form method="post" action="{{ url_for('web.service_add',ident=order.id) }}">{{ service_form.hidden_tag() }}<div class="form-grid">{{ field(service_form.service_type) }}{{ field(service_form.used_parts) }}{{ field(service_form.responsible) }}</div><button class="button">Salvar</button></form>{% endif %}
+{% if order.subtotal() or order.discount %}<div class="totals"><span>Valores anteriores <b>{{ order.subtotal()|brl }}</b></span>{% if order.discount %}<span>Desconto anterior {{ order.discount|brl }}</span>{% endif %}<div class="grand-total">Total da OS <strong>{{ order.total|brl }}</strong></div></div>{% endif %}
+</div>

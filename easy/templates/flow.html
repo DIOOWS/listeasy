@@ -2,14 +2,14 @@
 {% macro timeline(order) %}
 <ol class="order-flow" aria-label="Etapas de {{ order.number }}">
 {% for step in order.flow_steps %}<li class="flow-step {{ step.state }}" {% if step.state=='current' %}aria-current="step"{% endif %}>
-<span class="flow-dot" aria-hidden="true">{{ '✓' if step.state=='done' else loop.index }}</span><span class="flow-name">{{ step.label }}<span class="flow-sr"> — {{ 'Concluído' if step.state=='done' else 'Etapa atual' if step.state=='current' else 'Pendente' }}</span></span><span class="flow-date">{% if step.date %}{{ step.date|datebr }}{% elif step.state=='done' %}Sem data registrada{% elif step.state=='current' %}Atual{% else %}Pendente{% endif %}</span>
+<span class="flow-dot" aria-hidden="true">{{ '✓' if step.state=='done' else loop.index }}</span><span class="flow-name">{{ step.label }}<span class="flow-sr"> — {{ 'Concluído' if step.state=='done' else 'Etapa atual' if step.state=='current' else 'Pendente' }}</span></span><span class="flow-date">{% if step.date %}{{ step.date|datebr }}{% elif step.state=='done' %}Sem data registrada{% elif step.state=='current' %}Atual{% else %}Pendente{% endif %}</span><span class="flow-time">{{ step.timestamp|localtime if step.timestamp else 'Sem horário registrado' }}</span>
 </li>{% endfor %}</ol>
 {% endmacro %}
 
 {% macro flow_row(order) %}
 <div class="flow-entry"><details class="flow-order" data-flow-order>
 <summary><span class="flow-summary-main"><strong>{{ order.number if order.number.startswith('OS') else 'OS ' ~ order.number }}</strong><span>{{ order.client.name }}{% if order.model %} · {{ order.model }}{% endif %}</span><span>Placa: {{ order.plate or 'Não informada' }}</span><span>Frota: {{ order.fleet or 'Não informada' }}</span><span class="flow-summary-due">Prazo: {{ order.due_date|datebr if order.due_date else 'Não informado' }}{% if not order.closed and order.due_date and order.due_date<today %} · Em atraso{% endif %}</span></span><span class="flow-summary-end">{{ status_label(order,true) }}<span class="flow-chevron" aria-hidden="true">⌄</span></span></summary>
-<div class="flow-expanded"><div class="flow-row-meta"><span>Entrada: {{ order.entry_date|datebr }}</span><span>Total: <b>{{ order.total|brl }}</b></span></div>{{ timeline(order) }}<div class="flow-actions"><span>{{ order.responsible }}</span><a class="button secondary" href="{{ url_for('web.order_detail',ident=order.id) }}">Abrir OS</a></div></div>
+<div class="flow-expanded"><div class="flow-row-meta"><span>Entrada: {{ order.entered_at|localtime if order.entered_at else order.entry_date|datebr }}</span><span>Saída: {{ order.delivered_at|localtime if order.delivered_at else 'Não registrada' }}</span><span>Total: <b>{{ order.total|brl }}</b></span></div>{{ timeline(order) }}<div class="flow-actions"><span>{{ order.responsible }}</span><a class="button secondary" href="{{ url_for('web.order_detail',ident=order.id) }}">Abrir OS</a></div></div>
 </details><div class="flow-entry-actions" role="group" aria-label="Ações da OS {{ order.number }}">{{ order_actions(order) }}</div></div>
 {% endmacro %}
 
