@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, date
 from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from urllib.parse import urlsplit, unquote
-from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, session, send_file, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, session, send_file, current_app, jsonify
 from flask_login import current_user, login_user, logout_user, login_required
 from sqlalchemy import or_, func, case
 from sqlalchemy.orm import selectinload
@@ -129,6 +129,27 @@ def dashboard():
     finance_count=totals[3]
     orders=db.session.scalars(db.select(Order).where(or_(active,pending_finance)).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items)).order_by(active.desc(),Order.due_date.asc().nulls_last(),Order.id).limit(12)).all()
     return render_template('dashboard.html',orders=orders,counts=counts,finance_count=finance_count)
+
+@web.get('/modo-tv')
+@login_required
+def workshop_tv():
+    return render_template('workshop_tv.html')
+
+
+@web.get('/modo-tv/dados')
+@login_required
+def workshop_tv_data():
+    day=today()
+    active=Order.deleted_at.is_(None) & ~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada'])
+    orders=db.session.scalars(db.select(Order).where(active)
+        .options(db.joinedload(Order.vehicle),selectinload(Order.items))
+        .order_by(Order.due_date.asc().nulls_last(),Order.id)).all()
+    return jsonify(
+        open=len(orders),
+        late=sum(1 for order in orders if order.due_date and order.due_date<day),
+        html=render_template('workshop_tv_cards.html',orders=orders,day=day),
+    )
+
 
 @web.get('/clientes')
 @login_required
