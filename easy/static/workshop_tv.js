@@ -58,23 +58,15 @@
     return response.redirected || response.status === 401 || response.status === 403;
   }
 
-  async function loadOrder(order) {
-    const panel = order.querySelector('.tv-order-details');
-    if (panel.dataset.loading || panel.dataset.loaded) return;
-    panel.dataset.loading = 'true';
-    panel.textContent = 'Carregando os detalhes da OS…';
-    try {
-      const response = await fetch(order.dataset.url, {cache: 'no-store'});
-      if (signedOut(response)) throw new Error('Sessão encerrada. Volte ao sistema e entre novamente.');
-      if (!response.ok) throw new Error('Não foi possível carregar os detalhes. Feche e abra a OS para tentar novamente.');
-      panel.innerHTML = await response.text();
-      panel.dataset.loaded = 'true';
-    } catch (error) {
-      panel.textContent = error.message === 'Failed to fetch'
-        ? 'Sem conexão. Feche e abra a OS para tentar novamente.' : error.message;
-    } finally {
-      delete panel.dataset.loading;
+  function resumePanel() {
+    rotation.textContent = 'Atualização automática a cada 10 segundos';
+    if (pending !== null) {
+      const html = pending;
+      pending = null;
+      render(html);
     }
+    fitPage();
+    restartRotation();
   }
 
   cards.addEventListener('toggle', event => {
@@ -86,16 +78,8 @@
       });
       rotation.textContent = 'Troca de página pausada · OS aberta';
       restartRotation();
-      loadOrder(order);
     } else if (!expanded()) {
-      rotation.textContent = 'Atualização automática a cada 10 segundos';
-      if (pending !== null) {
-        const html = pending;
-        pending = null;
-        render(html);
-      }
-      fitPage();
-      restartRotation();
+      resumePanel();
     }
   }, true);
 
@@ -106,7 +90,11 @@
 
   cards.addEventListener('click', event => {
     const button = event.target.closest('[data-close-order]');
-    if (button) closeOrder(button.closest('.tv-card'));
+    if (button) {
+      closeOrder(button.closest('.tv-card'));
+      return;
+    }
+
   });
   document.addEventListener('keydown', event => {
     const order = expanded();

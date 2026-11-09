@@ -18,7 +18,7 @@
         <div><dt>Previsão</dt><dd>{{ due|datebr if due else 'Sem previsão' }}{% if due == day %} · Hoje{% endif %}</dd></div>
       </dl>
     </summary>
-    <div class="tv-order-details" aria-live="polite"></div>
+    <div class="tv-order-details">{% include "workshop_tv_order.html" %}</div>
   </details>
 {% else %}
 <p class="tv-empty">Nenhuma OS em atendimento.</p>

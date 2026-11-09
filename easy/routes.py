@@ -142,7 +142,8 @@ def workshop_tv_data():
     day=today()
     active=Order.deleted_at.is_(None) & ~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada'])
     orders=db.session.scalars(db.select(Order).where(active)
-        .options(db.joinedload(Order.vehicle),selectinload(Order.items))
+        .options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),
+            selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user))
         .order_by(Order.due_date.asc().nulls_last(),Order.id)).all()
     deadlines={order.id: order.due_date-timedelta(days=1) if order.due_date else None for order in orders}
     return jsonify(
