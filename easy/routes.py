@@ -144,11 +144,22 @@ def workshop_tv_data():
     orders=db.session.scalars(db.select(Order).where(active)
         .options(db.joinedload(Order.vehicle),selectinload(Order.items))
         .order_by(Order.due_date.asc().nulls_last(),Order.id)).all()
+    deadlines={order.id: order.due_date-timedelta(days=1) if order.due_date else None for order in orders}
     return jsonify(
         open=len(orders),
-        late=sum(1 for order in orders if order.due_date and order.due_date<day),
-        html=render_template('workshop_tv_cards.html',orders=orders,day=day),
+        late=sum(1 for due in deadlines.values() if due and due<day),
+        html=render_template('workshop_tv_cards.html',orders=orders,day=day,deadlines=deadlines),
     )
+
+
+@web.get('/modo-tv/os/<int:ident>')
+@login_required
+def workshop_tv_order(ident):
+    order=get_order(ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),
+        selectinload(Order.items),selectinload(Order.checks),selectinload(Order.photos),
+        selectinload(Order.events).joinedload(Event.user)])
+    return render_template('workshop_tv_order.html',order=order)
+
 
 
 @web.get('/clientes')

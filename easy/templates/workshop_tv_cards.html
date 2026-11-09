@@ -1,21 +1,26 @@
-{% for group in orders|batch(6) %}
-<section class="tv-grid" aria-label="Página {{ loop.index }}" {% if not loop.first %}hidden{% endif %}>
-  {% for order in group %}
-  {% set overdue = order.due_date and order.due_date < day %}
+<section class="tv-grid" aria-label="Ordens de serviço em atendimento">
+{% for order in orders %}
+  {% set due = deadlines[order.id] %}
+  {% set overdue = due and due < day %}
   {% set services = order.items|selectattr('kind','equalto','servico')|list %}
   {% set staff = services|selectattr('responsible')|map(attribute='responsible')|unique|list %}
-  <article class="tv-card{% if overdue %} overdue{% endif %}">
-    <div class="tv-card-top"><h3>{{ order.plate or 'Sem placa' }}</h3><span>Nº {{ order.number or order.id }}</span></div>
-    <div class="tv-badges"><span class="tv-badge tone-{{ order.status_tone }}">{{ order.status }}</span>{% if overdue %}<span class="tv-badge tone-red">Atrasada</span>{% endif %}</div>
-    <dl>
-      <div><dt>Veículo</dt><dd>{{ order.model or 'Não informado' }}</dd></div>
-      <div><dt>Serviço</dt><dd>{{ services[:2]|map(attribute='description')|join(' · ') or order.problem or 'Não informado' }}{% if services|length > 2 %} +{{ services|length - 2 }}{% endif %}</dd></div>
-      <div><dt>Responsável</dt><dd>{{ staff[:2]|join(', ') or order.responsible or 'Não informado' }}</dd></div>
-      <div><dt>Previsão</dt><dd>{{ order.due_date|datebr if order.due_date else 'Sem previsão' }}{% if order.due_date == day %} · Hoje{% endif %}</dd></div>
-    </dl>
-  </article>
-  {% endfor %}
-</section>
+  <details class="tv-card status-{{ 'red' if overdue else order.status_tone }}{% if overdue %} overdue{% endif %}" name="tv-order" data-order="{{ order.id }}" data-url="{{ url_for('web.workshop_tv_order',ident=order.id) }}">
+    <summary>
+      <svg class="tv-border-track" aria-hidden="true" focusable="false">
+        <rect pathLength="100" />
+      </svg>
+      <div class="tv-card-top"><strong>{{ order.plate or order.fleet or 'Sem placa' }}</strong><span>Nº OS {{ order.number or order.id }} <i aria-hidden="true"></i></span></div>
+      <div class="tv-badges"><span class="tv-status">{{ order.status }}</span>{% if overdue %}<span class="tv-status">Atrasada</span>{% endif %}</div>
+      <dl>
+        <div><dt>Veículo</dt><dd>{{ order.model or 'Não informado' }}</dd></div>
+        <div><dt>Serviço</dt><dd>{{ services[0].description if services else (order.problem or 'Não informado') }}</dd></div>
+        <div><dt>Responsável</dt><dd>{{ staff[:2]|join(', ') or order.responsible or 'Não informado' }}</dd></div>
+        <div><dt>Previsão</dt><dd>{{ due|datebr if due else 'Sem previsão' }}{% if due == day %} · Hoje{% endif %}</dd></div>
+      </dl>
+    </summary>
+    <div class="tv-order-details" aria-live="polite"></div>
+  </details>
 {% else %}
 <p class="tv-empty">Nenhuma OS em atendimento.</p>
 {% endfor %}
+</section>

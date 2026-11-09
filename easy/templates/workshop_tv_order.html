@@ -1,0 +1,54 @@
+<div class="tv-detail-head"><h3>Detalhes da OS {{ order.number or order.id }}</h3><button type="button" data-close-order>Fechar</button></div>
+<div class="tv-detail-columns">
+<section>
+  <h4>Atendimento</h4>
+  <dl>
+    <div><dt>Cliente</dt><dd>{{ order.client.name }}</dd></div>
+    <div><dt>Veículo</dt><dd>{{ order.model or '—' }}</dd></div>
+    <div><dt>Placa / frota</dt><dd>{{ order.plate or '—' }} / {{ order.fleet or '—' }}</dd></div>
+    <div><dt>Quilometragem</dt><dd>{{ order.mileage if order.mileage is not none else '—' }}</dd></div>
+    <div><dt>Entrada</dt><dd>{{ order.entered_at|localtime if order.entered_at else order.entry_date|datebr }}</dd></div>
+    <div><dt>Prazo cadastrado</dt><dd>{{ order.due_date|datebr }}</dd></div>
+    <div><dt>Saída</dt><dd>{{ order.delivered_at|localtime if order.delivered_at else order.delivered_date|datebr }}</dd></div>
+    <div><dt>Responsável</dt><dd>{{ order.responsible or '—' }}</dd></div>
+    <div><dt>Status</dt><dd>{{ order.status }}</dd></div>
+  </dl>
+  {% for title, value in [('Solicitação',order.problem),('Diagnóstico',order.diagnosis),('Observações',order.notes)] if value %}
+    <h4>{{ title }}</h4><p class="tv-detail-text">{{ value }}</p>
+  {% endfor %}
+</section>
+<section>
+  <h4>Serviços e peças</h4>
+  {% for item in order.items %}
+    <p class="tv-detail-text"><strong>{{ item.description }}</strong><br>
+    {{ item.service_type or ('Peça' if item.kind == 'peca' else 'Serviço') }}{% if item.responsible %} · {{ item.responsible }}{% endif %}
+    {% if item.kind == 'servico' %} · {{ 'Concluído' if item.done else 'Pendente' }}{% endif %}
+    {% if item.used_parts %}<br>Peças utilizadas: {{ item.used_parts }}{% endif %}
+    {% if item.unit_price %}<br>{{ item.quantity }} × {{ item.unit_price|brl }} = {{ item.total|brl }}{% endif %}</p>
+  {% else %}<p>Nenhum item cadastrado.</p>{% endfor %}
+  {% if order.total %}<p><strong>Total: {{ order.total|brl }}</strong></p>{% endif %}
+</section>
+<section>
+  <h4>Checklist</h4>
+  {% for stage in ['entrada','saida'] %}
+    <p><strong>{{ 'Entrada' if stage == 'entrada' else 'Saída' }}</strong></p>
+    <ul>
+    {% for check in order.checks if check.stage == stage %}
+      <li>{{ check.label }}: {{ {'pendente':'Pendente','ok':'OK','avaria':'Avaria','na':'Não se aplica'}.get(check.result,check.result) }}{% if check.notes %} · {{ check.notes }}{% endif %}</li>
+    {% else %}<li>Sem registros.</li>{% endfor %}
+    </ul>
+  {% endfor %}
+</section>
+<section>
+  <h4>Histórico</h4>
+  <ul>
+  {% for event in order.events %}
+    <li>{{ event.description }}<br><small>{{ event.user.name }} · {{ event.created_at|localtime }}</small></li>
+  {% else %}<li>Sem movimentações.</li>{% endfor %}
+  </ul>
+  {% if order.photos %}
+    <h4>Fotos</h4>
+    <ul>{% for photo in order.photos %}<li><a href="{{ url_for('web.photo_view',ident=photo.id) }}" target="_blank" rel="noopener">{{ photo.caption or ('Foto ' ~ loop.index) }}</a></li>{% endfor %}</ul>
+  {% endif %}
+</section>
+</div>
