@@ -2,7 +2,6 @@
 <div class="tv-detail-columns">
 <section>
   <h4>Atendimento</h4>
-  {% if order.cover_key %}<a href="{{ url_for('web.order_cover',ident=order.id,v=order.cover_key) }}" target="_blank" rel="noopener">Ver foto principal em tamanho maior</a>{% endif %}
   <dl>
     <div><dt>Cliente</dt><dd>{{ order.client.name }}</dd></div>
     <div><dt>Veículo</dt><dd>{{ order.model or '—' }}</dd></div>
@@ -19,6 +18,15 @@
   {% endfor %}
 </section>
 <section>
+  {% if order.cover_key %}
+  {% set cover_url = url_for('web.order_cover',ident=order.id,v=order.cover_key) %}
+  <figure class="tv-detail-photo">
+    <a href="{{ cover_url }}" target="_blank" rel="noopener" aria-label="Abrir foto do veículo em tamanho original">
+      <img src="{{ cover_url }}" alt="Foto de {{ order.model or order.plate or 'veículo em manutenção' }}" loading="lazy" decoding="async">
+    </a>
+    <figcaption>Foto principal do veículo</figcaption>
+  </figure>
+  {% endif %}
   <h4>Serviços e peças</h4>
   {% for item in order.items %}
     <p class="tv-detail-text"><strong>{{ item.description }}</strong><br>

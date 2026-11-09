@@ -124,3 +124,8 @@ main{padding-top:.65rem;padding-bottom:.65rem}
 .tv-client{margin:0;min-width:0}
 .tv-client img{height:1.35rem}
 .tv-vehicle-photo{max-height:3.8rem}
+
+.tv-detail-photo{margin:0 0 .8rem}
+.tv-detail-photo a{display:block;border-radius:.45rem;overflow:hidden;background:#edf2f7}
+.tv-detail-photo img{display:block;width:100%;height:clamp(10rem,46vh,25rem);object-fit:contain}
+.tv-detail-photo figcaption{margin-top:.35rem;color:#172438;font-size:.74rem;font-weight:700}
