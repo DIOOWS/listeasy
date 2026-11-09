@@ -41,3 +41,9 @@ body.navigating::before{content:'';position:fixed;top:0;left:0;width:35%;height:
 
 .password-toggle{margin-top:8px;font-size:13px;min-height:36px}
 .service-row{border-bottom:1px solid #e5e7eb;padding:14px 0}.service-row h3{font-size:14px;margin:0}.service-row p{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.service-row .actions form{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.flow-time{font-size:10px;overflow-wrap:anywhere;max-width:100%}
+
+.client-logo-preview,.order-cover-preview{display:block;max-width:100%;object-fit:contain;border:1px solid #e2e8f0;border-radius:.5rem}
+.client-logo-preview{width:8rem;height:4rem;margin:0 0 1rem}
+.order-cover-preview{width:21rem;height:12rem;background:#f8fafc}
+.order-cover-figure{margin:1rem 0}
+.order-cover-figure figcaption{margin-top:.35rem}

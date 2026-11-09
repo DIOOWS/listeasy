@@ -36,6 +36,8 @@ class User(UserMixin, db.Model):
 
 class Client(db.Model):
     __tablename__ = 'ecs_clients'
+    logo_key = db.Column(db.String(64))
+    logo_data = db.deferred(db.Column(db.LargeBinary))
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False, index=True)
     document = db.Column(db.String(30), default='')
@@ -60,7 +62,10 @@ class Vehicle(db.Model):
 
 class Order(db.Model):
     __tablename__ = 'ecs_orders'
+    cover_key = db.Column(db.String(64))
+    cover_data = db.deferred(db.Column(db.LargeBinary))
     id = db.Column(db.Integer, primary_key=True)
+    parent_order_id = db.Column(db.Integer, db.ForeignKey('ecs_orders.id', name='fk_ecs_orders_parent'))
     number = db.Column(db.String(50), unique=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('ecs_vehicles.id'), nullable=True, index=True)
     client_id = db.Column(db.Integer, db.ForeignKey('ecs_clients.id'), nullable=False)
@@ -95,7 +100,7 @@ class Order(db.Model):
     deleted_at = db.Column(db.DateTime, index=True)
     version = db.Column(db.Integer, nullable=False, default=1)
     __mapper_args__ = {'version_id_col': version}
-    __table_args__ = (db.CheckConstraint('mileage >= 0 AND discount >= 0', name='ecs_order_nonnegative'), db.CheckConstraint('due_date >= entry_date', name='ecs_order_dates'))
+    __table_args__ = (db.CheckConstraint('mileage >= 0 AND discount >= 0', name='ecs_order_nonnegative'), db.CheckConstraint('due_date >= entry_date', name='ecs_order_dates'), db.UniqueConstraint('parent_order_id', name='uq_ecs_orders_parent'))
     vehicle = db.relationship('Vehicle')
     client = db.relationship('Client')
     items = db.relationship('Item', back_populates='order', cascade='all, delete-orphan', order_by='Item.id')

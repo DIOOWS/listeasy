@@ -10,13 +10,17 @@
         <rect pathLength="100" />
       </svg>
       <div class="tv-card-top"><strong>{{ order.plate or order.fleet or 'Sem placa' }}</strong><span>Nº OS {{ order.number or order.id }} <i aria-hidden="true"></i></span></div>
-      <div class="tv-badges"><span class="tv-status">{{ order.status }}</span>{% if overdue %}<span class="tv-status">Atrasada</span>{% endif %}</div>
+      <div class="tv-card-labels"><div class="tv-badges"><span class="tv-status">{{ order.status }}</span>{% if overdue %}<span class="tv-status">Atrasada</span>{% endif %}</div>
+      {% if order.client.logo_key %}<div class="tv-client"><img src="{{ url_for('web.client_logo',ident=order.client.id,v=order.client.logo_key) }}" alt="" loading="lazy" decoding="async"><strong>{{ order.client.name }}</strong></div>{% endif %}</div>
+      <div class="tv-card-info{% if order.cover_key %} tv-card-with-photo{% endif %}">
       <dl>
         <div><dt>Veículo</dt><dd>{{ order.model or 'Não informado' }}</dd></div>
         <div><dt>Serviço</dt><dd>{{ services[0].description if services else (order.problem or 'Não informado') }}</dd></div>
         <div><dt>Responsável</dt><dd>{{ staff[:2]|join(', ') or order.responsible or 'Não informado' }}</dd></div>
         <div><dt>Previsão</dt><dd>{{ due|datebr if due else 'Sem previsão' }}{% if due == day %} · Hoje{% endif %}</dd></div>
       </dl>
+      {% if order.cover_key %}<img class="tv-vehicle-photo" src="{{ url_for('web.order_cover',ident=order.id,v=order.cover_key) }}" alt="Foto de {{ order.model or order.plate or 'veículo em manutenção' }}" loading="lazy" decoding="async">{% endif %}
+      </div>
     </summary>
     <div class="tv-order-details">{% include "workshop_tv_order.html" %}</div>
   </details>

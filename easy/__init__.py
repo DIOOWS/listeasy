@@ -142,6 +142,40 @@ def create_app(config=None):
             raise click.ClickException('Usuário não encontrado ou senha inválida.')
         user.set_password(password);user.failures=0;user.locked_until=None;user.session_version+=1
         db.session.commit();click.echo('Senha atualizada. Sessões anteriores revogadas.')
+    @app.cli.command('migrate-images-to-cloudinary')
+    def migrate_images_to_cloudinary():
+        """Transfer existing covers and logos, then clear their database bytes."""
+        from .media import configure_photos, upload_image
+        from .models import Client, Order
+        try:
+            configure_photos()
+        except (RuntimeError, ValueError) as exc:
+            raise click.ClickException('Configure CLOUDINARY_URL antes de transferir as imagens.') from exc
+        count = 0
+        for model, key in [(Client, 'logo'), (Order, 'cover')]:
+            blob = getattr(model, key + '_data')
+            reference = getattr(model, key + '_key')
+            while True:
+                record = db.session.scalar(db.select(model).where(blob.is_not(None)).order_by(model.id).limit(1))
+                if record is None:
+                    break
+                ident = record.id
+                original = getattr(record, key + '_key')
+                try:
+                    uploaded = upload_image(key, getattr(record, key + '_data'))
+                    result = db.session.execute(db.update(model).where(model.id == ident,
+                        reference == original, blob.is_not(None)).values({
+                        key + '_key': uploaded, key + '_data': None}))
+                    if result.rowcount != 1:
+                        db.session.rollback()
+                        raise RuntimeError('A imagem mudou durante a transferência.')
+                    db.session.commit()
+                    count += 1
+                except Exception as exc:
+                    db.session.rollback()
+                    raise click.ClickException(f'Transferência interrompida em {key} #{ident}. {count} imagem(ns) concluída(s). Corrija a falha e execute novamente.') from exc
+        click.echo(f'{count} imagem(ns) transferida(s) ao Cloudinary.')
+
     return app
 
 @login_manager.user_loader

@@ -4,11 +4,17 @@ from flask_wtf.file import FileField, FileRequired
 from wtforms import StringField, PasswordField, TextAreaField, SelectField, DateField, IntegerField, DecimalField, BooleanField, HiddenField
 from wtforms.validators import DataRequired, InputRequired, Length, NumberRange, Optional, Regexp
 
+from .media import optimize_upload
+
+IMAGE_ACCEPT = {"accept": "image/jpeg,image/png,image/webp"}
+
 class LoginForm(FlaskForm):
     username = StringField('Usuário', validators=[DataRequired(), Length(max=80)])
     password = PasswordField('Senha', validators=[DataRequired(), Length(max=128)])
 
 class ClientForm(FlaskForm):
+    logo_file = FileField('Logo do cliente (opcional)', validators=[optimize_upload(480, True)], render_kw=IMAGE_ACCEPT)
+    remove_logo = BooleanField('Remover logo atual')
     name = StringField('Nome / razão social', validators=[DataRequired(), Length(max=150)])
     document = StringField('CPF / CNPJ', validators=[Optional(), Length(max=30)])
     phone = StringField('Telefone / WhatsApp', validators=[Optional(), Length(max=40)])
@@ -18,6 +24,8 @@ class ClientForm(FlaskForm):
     active = BooleanField('Cadastro ativo', default=True)
 
 class OrderForm(FlaskForm):
+    cover_file = FileField('Foto principal do veículo (opcional)', validators=[optimize_upload(960)], render_kw=IMAGE_ACCEPT)
+    remove_cover = BooleanField('Remover foto principal atual')
     number = StringField('Número da OS (vazio = automático)', validators=[Optional(), Length(max=50)])
     client_id = SelectField('Cliente', coerce=int, validators=[InputRequired()])
     plate = StringField('Placa / identificação', validators=[Optional(), Length(max=10)], render_kw={'placeholder':'Ex.: ABC1D23','autocomplete':'off'})

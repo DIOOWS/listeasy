@@ -2,6 +2,7 @@
 <div class="tv-detail-columns">
 <section>
   <h4>Atendimento</h4>
+  {% if order.cover_key %}<a href="{{ url_for('web.order_cover',ident=order.id,v=order.cover_key) }}" target="_blank" rel="noopener">Ver foto principal em tamanho maior</a>{% endif %}
   <dl>
     <div><dt>Cliente</dt><dd>{{ order.client.name }}</dd></div>
     <div><dt>Veículo</dt><dd>{{ order.model or '—' }}</dd></div>

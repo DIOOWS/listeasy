@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timedelta, date
 from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
-from urllib.parse import urlsplit, unquote
+from urllib.parse import urlsplit
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, session, send_file, current_app, jsonify
 from flask_login import current_user, login_user, logout_user, login_required
 from sqlalchemy import or_, func, case
@@ -13,6 +13,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from . import db, limiter, today
 from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, ENTRY_CHECKS, EXIT_CHECKS, utcnow
 from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm, ServiceForm
+
+from .media import configure_photos, prepare_image, save_image, serve_image
 
 web=Blueprint('web',__name__)
 DUMMY_HASH=generate_password_hash('dummy-password-never-a-login')
@@ -179,10 +181,14 @@ def client_form(ident=None):
     obj=db.get_or_404(Client,ident) if ident else Client()
     if ident and obj.deleted_at:abort(404)
     form=ClientForm(obj=obj if ident else None)
-    if form.validate_on_submit():
-        form.populate_obj(obj);obj.name=obj.name.strip();db.session.add(obj);db.session.commit()
+    if form.validate_on_submit() and prepare_image('logo',form.logo_file):
+        for key in ('name','document','phone','email','address','notes','active'):
+            setattr(obj,key,form[key].data)
+        save_image(obj,'logo',form.logo_file,form.remove_logo.data)
+        obj.name=obj.name.strip();db.session.add(obj);db.session.commit()
         flash('Cliente salvo.','success');return redirect(url_for('web.clients'))
-    return render_template('form.html',form=form,title='Editar cliente' if ident else 'Novo cliente',back=url_for('web.clients'))
+    return render_template('form.html',form=form,title='Editar cliente' if ident else 'Novo cliente',back=url_for('web.clients'),
+        image_url=url_for('web.client_logo',ident=obj.id,v=obj.logo_key) if obj.logo_key else None)
 
 @web.post('/clientes/<int:ident>/excluir')
 @admin_required
@@ -235,37 +241,116 @@ def orders():
     page=db.paginate(filtered_orders(),per_page=25,error_out=False)
     return render_template('orders.html',page=page,title='Ordens de serviço',q=request.args.get('q',''),status=request.args.get('status',''),vehicle=None)
 
+def linked_order(order, include_deleted=False):
+    condition = Order.id == order.parent_order_id if order.parent_order_id else Order.parent_order_id == order.id
+    if not include_deleted:
+        condition = condition & Order.deleted_at.is_(None)
+    return db.session.scalar(db.select(Order).where(condition))
+
+
+def require_unlinked(order):
+    if linked_order(order, include_deleted=True):
+        abort(409, description='Esta OS já possui um vínculo. Desvincule antes de vincular outra.')
+
+
+@web.post('/ordens/<int:ident>/vincular')
+@login_required
+def order_link(ident):
+    order = get_order(ident)
+    mutable(order)
+    number = request.form.get('linked_number', '').strip().upper()
+    other = db.session.scalar(db.select(Order).where(Order.number == number,
+        Order.client_id == order.client_id, Order.deleted_at.is_(None))) if number else None
+    if other is None or other.id == order.id:
+        flash('Informe o número de outra OS do mesmo cliente.','error')
+    else:
+        require_unlinked(order)
+        require_unlinked(other)
+        other.parent_order_id = order.id
+        event(order,f'OS {other.number} vinculada ao atendimento.')
+        event(other,f'OS {order.number} vinculada ao atendimento.')
+        db.session.commit()
+        flash('Ordens vinculadas.','success')
+    return redirect(url_for('web.order_detail',ident=ident))
+
+
+@web.post('/ordens/<int:ident>/desvincular')
+@login_required
+def order_unlink(ident):
+    order = get_order(ident)
+    mutable(order)
+    other = linked_order(order)
+    if not other:abort(404)
+    child = order if order.parent_order_id else other
+    child.parent_order_id = None
+    event(order,f'Vínculo com a OS {other.number} removido.')
+    event(other,f'Vínculo com a OS {order.number} removido.')
+    db.session.commit()
+    flash('Vínculo removido. As duas OS continuam cadastradas.','success')
+    return redirect(url_for('web.order_detail',ident=ident))
+
+
 @web.route('/ordens/nova',methods=['GET','POST'])
 @login_required
 def order_new():
+    source_id=request.args.get('vinculada_a',type=int)
+    source=get_order(source_id) if source_id is not None else None
+    if source:require_unlinked(source)
     form=OrderForm()
-    order_choices(form)
-    if form.validate_on_submit() and validate_order(form):
-        order=Order();populate_order(form,order);order.entered_at=utcnow();order.status_changed_at=order.entered_at
+    order_choices(form,source)
+    if source:
+        form.client_id.choices=[choice for choice in form.client_id.choices if choice[0]==source.client_id]
+        if request.method=='GET':
+            form.client_id.data=source.client_id
+            form.plate.data=source.plate
+            form.model.data=source.model
+            form.fleet.data=source.fleet
+    if form.validate_on_submit() and validate_order(form) and prepare_image('cover',form.cover_file):
+        order=Order(parent_order_id=source.id if source else None);populate_order(form,order);order.entered_at=utcnow();order.status_changed_at=order.entered_at
         if not order.entry_date:order.entry_date=today()
         order.number=(form.number.data or '').strip().upper() or None
+        save_image(order,'cover',form.cover_file)
         db.session.add(order);db.session.flush()
         if not order.number:order.number=f'OS-{order.created_at.year}-{order.id:06d}'
         for stage,labels in [('entrada',ENTRY_CHECKS),('saida',EXIT_CHECKS)]:
             for label in labels:db.session.add(Check(order=order,stage=stage,label=label))
-        event(order,'OS criada.');db.session.commit()
+        event(order,'OS criada.')
+        if source:
+            event(order,f'Criada no atendimento da OS {source.number}.')
+            event(source,f'OS {order.number} criada e vinculada ao atendimento.')
+        db.session.commit()
         flash('OS criada. Agora adicione os serviços e as peças.','success')
         return redirect(url_for('web.order_detail',ident=order.id))
-    return render_template('order_form.html',form=form,title='Nova ordem de serviço',back=url_for('web.orders'),empty=not form.client_id.choices,empty_message='Cadastre um cliente ativo para abrir uma OS. O veículo é preenchido aqui.')
+    return render_template('order_form.html',form=form,title='Nova ordem de serviço',back=url_for('web.order_detail',ident=source.id) if source else url_for('web.orders'),source=source,empty=not form.client_id.choices,empty_message='Cadastre um cliente ativo para abrir uma OS. O veículo é preenchido aqui.')
 
 @web.route('/ordens/<int:ident>/editar',methods=['GET','POST'])
 @login_required
 def order_edit(ident):
     order=get_order(ident)
     form=OrderForm(obj=order);order_choices(form,order)
+    if linked_order(order):
+        form.client_id.choices=[choice for choice in form.client_id.choices if choice[0]==order.client_id]
     if request.method=='GET':form.version.data=str(order.version)
     if form.validate_on_submit():
         mutable(order)
-        if validate_order(form,order):
+        if validate_order(form,order) and prepare_image('cover',form.cover_file):
             number=(form.number.data or order.number).strip().upper();populate_order(form,order);order.number=number
+            save_image(order,'cover',form.cover_file,form.remove_cover.data)
             event(order,'Dados da OS atualizados.');db.session.commit();flash('OS atualizada.','success')
             return redirect(url_for('web.order_detail',ident=ident))
-    return render_template('order_form.html',form=form,title=f'Editar {order.number}',back=url_for('web.order_detail',ident=ident))
+    return render_template('order_form.html',form=form,title=f'Editar {order.number}',back=url_for('web.order_detail',ident=ident),order=order)
+
+@web.get('/ordens/<int:ident>/foto-principal')
+@login_required
+def order_cover(ident):
+    order=get_order(ident)
+    return serve_image(order,'cover')
+
+@web.get('/clientes/<int:ident>/logo')
+@login_required
+def client_logo(ident):
+    client=db.get_or_404(Client,ident)
+    return serve_image(client,'logo')
 
 @web.post('/ordens/<int:ident>/excluir')
 @admin_required
@@ -273,6 +358,11 @@ def order_delete(ident):
     order=get_order(ident)
     if request.form.get('version')!=str(order.version):
         abort(409,description='A OS foi alterada. Atualize a página antes de excluir.')
+    other=linked_order(order)
+    if other:
+        child=order if order.parent_order_id else other
+        child.parent_order_id=None
+        event(other,f'Vínculo encerrado: OS {order.number} excluída.')
     order.deleted_at=utcnow()
     event(order,'OS excluída pelo administrador.',invalidate_ready=False)
     db.session.commit()
@@ -287,7 +377,7 @@ def order_detail(ident):
     flow_form=FlowForm(version=str(order.version),action_date=today())
     if current_user.role=='admin':
         flow_form.action.choices += [('clear_approval','Corrigir: remover aprovação'),('clear_invoice','Corrigir: remover faturamento'),('clear_received','Corrigir: remover recebimento')]
-    return render_template('order.html',order=order,status_form=status_form,flow_form=flow_form,item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
+    return render_template('order.html',order=order,related_order=linked_order(order),status_form=status_form,flow_form=flow_form,item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
 
 def record_status(order,target,day=None,reference=''):
     stamp=utcnow();day=day or today();previous=order.status
@@ -412,13 +502,6 @@ def item_action(ident,item_id):
         item.done=not item.done;event(order,f'Item {"concluído" if item.done else "reaberto"}: {item.description}.')
     else:abort(400)
     db.session.commit();return redirect(url_for('web.order_detail',ident=ident))
-
-def configure_photos():
-    import cloudinary
-    parsed=urlsplit(current_app.config['CLOUDINARY_URL'])
-    if parsed.scheme!='cloudinary' or not parsed.hostname or not parsed.username or not parsed.password:
-        raise RuntimeError('CLOUDINARY_URL inválida.')
-    cloudinary.config(cloud_name=parsed.hostname,api_key=unquote(parsed.username),api_secret=unquote(parsed.password),secure=True)
 
 @web.post('/ordens/<int:ident>/fotos')
 @login_required
