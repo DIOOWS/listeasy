@@ -51,7 +51,7 @@
 <section>
   <h4>Histórico</h4>
   <ul>
-  {% for event in order.events %}
+  {% for event in order.events if 'faturad' not in (event.description|lower) and 'faturamento' not in (event.description|lower) and 'registro invoiced removido' not in (event.description|lower) %}
     <li>{{ event.description }}<br><small>{{ event.user.name }} · {{ event.created_at|localtime }}</small></li>
   {% else %}<li>Sem movimentações.</li>{% endfor %}
   </ul>
