@@ -69,6 +69,13 @@
     fitPage();
   }
 
+  function showMessage(message) {
+    const notice = document.createElement('p');
+    notice.className = 'tv-empty';
+    notice.textContent = message;
+    cards.replaceChildren(notice);
+  }
+
   function signedOut(response) {
     return response.redirected || response.status === 401 || response.status === 403;
   }
@@ -127,7 +134,7 @@
           sync.textContent = 'Sessão encerrada. Entre novamente para atualizar.';
           setTimeout(refresh, 10000);
         } else {
-          cards.textContent = 'Sessão encerrada. Volte ao sistema e entre novamente.';
+          showMessage('Sessão encerrada. Volte ao sistema e entre novamente.');
           document.getElementById('open').textContent = '—';
           document.getElementById('late').textContent = '—';
           sync.textContent = 'Entre novamente para atualizar o painel.';
@@ -147,7 +154,7 @@
       sync.textContent = `Última atualização: ${clock.format(new Date())}`;
     } catch {
       sync.textContent = 'Conexão indisponível. Tentando atualizar…';
-      if (previous === null) cards.textContent = 'Aguardando conexão com o sistema.';
+      if (previous === null) showMessage('Aguardando conexão com o sistema.');
     } finally {
       clearTimeout(timeout);
     }

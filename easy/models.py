@@ -119,9 +119,9 @@ class Order(db.Model):
         return self.vehicle_fleet if self.vehicle_fleet is not None else self.vehicle.fleet if self.vehicle else ''
     @property
     def status_tone(self):
-        return {'Aguardando avaliação':'gray', 'Aguardando aprovação':'amber',
-                'Aguardando peças':'orange', 'Em serviço':'blue', 'Aprovado':'lime', 'Faturado':'purple', 'Recebido':'indigo',
-                'Pronto para entrega':'teal', 'Entregue':'green', 'Cancelada':'red'}.get(self.status,'gray')
+        return {'Aguardando avaliação':'gray', 'Aguardando aprovação':'brown',
+                'Aguardando peças':'orange', 'Em serviço':'blue', 'Aprovado':'amber', 'Faturado':'purple', 'Recebido':'indigo',
+                'Pronto para entrega':'green', 'Entregue':'teal', 'Cancelada':'red'}.get(self.status,'gray')
     @property
     def flow_tone(self):
         return self.status_tone

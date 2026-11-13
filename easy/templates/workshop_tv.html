@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel da Oficina · Modo TV</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=13) }}">
-<script src="{{ url_for('static',filename='workshop_tv.js',v=5) }}" defer></script>
+<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=15) }}">
+<script src="{{ url_for('static',filename='workshop_tv.js',v=6) }}" defer></script>
 </head>
 <body class="{{ 'tv-admin' if current_user.role == 'admin' else 'tv-team' }}">
 <header class="tv-header">
-  <div class="tv-brand"><img src="{{ url_for('static',filename='logo.png') }}" alt=""><h1>Painel da Oficina <span>· Modo TV</span></h1></div>
+  <div class="tv-brand"><img src="{{ url_for('static',filename='logo.png') }}" alt="Easy Assistência 24h"></div>
+  <h1>Painel da Oficina <span>– Modo TV</span></h1>
   <nav>
     <button id="fullscreen" type="button" hidden>Tela cheia</button>
     {% if current_user.role == 'admin' %}
@@ -31,11 +32,11 @@
   </section>
   <div id="cards"><p class="tv-empty">Buscando atendimentos…</p></div>
   <nav class="tv-footer" id="tv-pagination" aria-label="Páginas de ordens de serviço">
-    <button id="page-back" type="button" aria-label="Página anterior" disabled>←</button>
+    <button id="page-back" type="button" aria-label="Página anterior" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12l8-8v4h12v8H10v4z"/></svg></button>
     <span id="page" role="status"></span>
-    <button id="page-next" type="button" aria-label="Próxima página" disabled>→</button>
+    <button id="page-next" type="button" aria-label="Próxima página" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12l-8-8v4H2v8h12v4z"/></svg></button>
   </nav>
-  <noscript>Ative o JavaScript para acompanhar as OS em tempo real.</noscript>
+  <noscript><p class="tv-noscript">Ative o JavaScript para acompanhar as OS em tempo real.</p></noscript>
 </main>
 </body>
 </html>
