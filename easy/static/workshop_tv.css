@@ -13,6 +13,7 @@ main{padding:1rem 1.35rem}
 h2{font-size:1.45rem}
 #sync,.tv-footer{color:#44566e;font-size:.75rem}
 #sync{margin-top:.2rem}
+.tv-profile{margin-top:.2rem;color:#44566e;font-size:.8rem;font-weight:700}
 .tv-counts>div{padding:.45rem .7rem;border-radius:.45rem;background:#e0edfa;white-space:nowrap}
 .tv-counts strong{font-size:1.35rem;margin-right:.15rem}
 .tv-counts .late,.tone-red{background:#fee2e2;color:#911d24}
@@ -72,8 +73,12 @@ main{padding-top:.65rem;padding-bottom:.65rem}
 /* A cor do contorno também identifica o texto e a bolinha de status. */
 .tv-card{--tv-status-color:#475569;position:relative;border-color:var(--tv-status-color);color:#101828}
 .tv-card.status-blue{--tv-status-color:#1d55a7}
-.tv-card.status-amber,.tv-card.status-orange{--tv-status-color:#956000}
-.tv-card.status-teal,.tv-card.status-green{--tv-status-color:#087444}
+.tv-card.status-amber{--tv-status-color:#795500}
+.tv-card.status-orange{--tv-status-color:#9a3b0c}
+.tv-card.status-teal{--tv-status-color:#09666a}
+.tv-card.status-green{--tv-status-color:#176534}
+.tv-card.status-pink{--tv-status-color:#9a2867}
+.tv-card.status-indigo{--tv-status-color:#4338a0}
 .tv-card.status-purple{--tv-status-color:#7138a0}
 .tv-card.status-red{--tv-status-color:#b4232e}
 .tv-card.overdue,.tv-card[open]{border-color:var(--tv-status-color);background:#fff}
@@ -88,8 +93,12 @@ main{padding-top:.65rem;padding-bottom:.65rem}
 /* O traço percorre o perímetro real, inclusive nos cantos arredondados. */
 .tv-card{--tv-border-bright:#94a3b8}
 .tv-card.status-blue{--tv-border-bright:#0090ff}
-.tv-card.status-amber,.tv-card.status-orange{--tv-border-bright:#ffb000}
-.tv-card.status-teal,.tv-card.status-green{--tv-border-bright:#00be72}
+.tv-card.status-amber{--tv-border-bright:#facc15}
+.tv-card.status-orange{--tv-border-bright:#f97316}
+.tv-card.status-teal{--tv-border-bright:#14b8a6}
+.tv-card.status-green{--tv-border-bright:#22c55e}
+.tv-card.status-pink{--tv-border-bright:#ec4899}
+.tv-card.status-indigo{--tv-border-bright:#818cf8}
 .tv-card.status-purple{--tv-border-bright:#ae55ff}
 .tv-card.status-red{--tv-border-bright:#ff2947}
 .tv-border-track{
@@ -151,3 +160,33 @@ main{padding-top:.65rem;padding-bottom:.65rem}
 }
 .tv-grid:has(.tv-card[open]) .tv-card{animation-play-state:paused}
 @media(prefers-reduced-motion:reduce){.tv-card:not([open]){animation:none}}
+
+.tv-admin,
+.tv-team {
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  --tv-background-shade: rgb(11 25 44 / 64%);
+}
+
+.tv-admin {
+  --tv-background-shade: rgb(5 6 9 / 77%);
+}
+
+.tv-admin::before,
+.tv-team::before {
+  content: '';
+  position: fixed;
+  inset: -18px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(var(--tv-background-shade), var(--tv-background-shade)),
+              url('workshop-tv-background.png') center center / cover no-repeat;
+  filter: blur(9px);
+}
+
+.tv-admin .tv-header { background: #0c0e12; }
+.tv-admin nav :is(a, button) { background: #20242c; border-color: #505966; }
+.tv-overview h2 { color: #fff; }
+.tv-overview :is(.tv-profile, #sync),
+.tv-footer #page { color: #e5edf8; }

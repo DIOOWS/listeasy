@@ -1,7 +1,7 @@
 <section class="tv-grid" aria-label="Ordens de serviço em atendimento">
 {% for order in orders %}
   {% set due = deadlines[order.id] %}
-  {% set overdue = due and due < day %}
+  {% set overdue = order.id in overdue_ids %}
   {% set services = order.items|selectattr('kind','equalto','servico')|list %}
   {% set staff = services|selectattr('responsible')|map(attribute='responsible')|unique|list %}
   <details class="tv-card status-{{ 'red' if overdue else order.status_tone }}{% if overdue %} overdue{% endif %}" name="tv-order" data-order="{{ order.id }}" data-url="{{ url_for('web.workshop_tv_order',ident=order.id) }}">

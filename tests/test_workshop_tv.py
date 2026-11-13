@@ -54,7 +54,7 @@ def test_tv_expansion_is_read_only_and_admin_sees_actual_deadline(client, app):
 
 def test_team_uses_read_only_tv_with_workshop_deadline(client, app):
     ident = create_order(client, app)
-    real_due = today() + timedelta(days=1)
+    real_due = today()
     workshop_due = today() - timedelta(days=1)
     with app.app_context():
         order = db.session.get(Order, ident)
@@ -67,7 +67,11 @@ def test_team_uses_read_only_tv_with_workshop_deadline(client, app):
         'client_id': 1, 'due_date': real_due.isoformat(),
         'workshop_due_date': workshop_due.isoformat(), 'version': version(app, ident)
     }).status_code == 302
-    assert client.get('/modo-tv/dados').get_json()['late'] == 0
+    admin_cards = client.get('/modo-tv/dados').get_json()
+    assert admin_cards['late'] == 0
+    assert 'status-red overdue' not in admin_cards['html']
+    assert f"{real_due.strftime('%d/%m/%Y')} · Hoje" in admin_cards['html']
+    assert 'Administrador · admin' in client.get('/modo-tv').text
 
     team = app.test_client()
     assert team.post('/login?next=/ordens/nova', data={
@@ -76,6 +80,7 @@ def test_team_uses_read_only_tv_with_workshop_deadline(client, app):
     assert team.get('/').location == '/modo-tv'
     assert team.get('/login').location == '/modo-tv'
     panel = team.get('/modo-tv').text
+    assert 'Equipe · team' in panel
     assert 'Sair' in panel and 'Voltar' not in panel
     for path in ('/ordens', f'/ordens/{ident}/editar', '/clientes', '/relatorios/exportar'):
         assert team.get(path).status_code == 403

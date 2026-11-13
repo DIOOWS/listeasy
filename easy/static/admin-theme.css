@@ -1,0 +1,56 @@
+body.theme-admin {
+  color-scheme: dark;
+  --bg: #0c0e12;
+  --surface: #16191f;
+  --ink: #f1f3f6;
+  --muted: #b1bac9;
+  --line: #333a46;
+  --brand: #a9d1ff;
+  --soft: #222833;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.theme-admin :is(a, a:hover, .link, .nav a.active, .grand-total) {
+  color: var(--brand);
+}
+
+.theme-admin :is(button, input, select, textarea, .order-list-row, .order-flow,
+                 .status-label, .badge, .alert, .request-message) {
+  color: var(--ink);
+}
+
+.theme-admin :is(.muted, .eyebrow, .flow-legend, .flow-help, .flow-finance-note) {
+  color: var(--muted);
+}
+
+.theme-admin :is(.button, .icon-button, .mobile-nav, #app-menu, .action-status,
+                 .order-cover-preview) {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.theme-admin :is(.dashboard-metrics .metric, th, .badge, .mobile-nav [aria-current=page],
+                 .mobile-nav .active, .mobile-nav .nav-pending) {
+  background: var(--soft);
+}
+
+.theme-admin :is(.button:hover, .icon-button:active, .order-list-row:hover,
+                 .menu-links a:hover, .dashboard-metrics .metric:hover) {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.theme-admin :is(.mobile-nav a, .mobile-nav button) { color: var(--ink); }
+.theme-admin .nav a { color: var(--muted); }
+.theme-admin .brand img { background: #fff; border-radius: 5px; }
+.theme-admin :is(.input, .request-error, .service-row, .client-logo-preview) {
+  border-color: var(--line);
+}
+.theme-admin .icon-button:focus-visible { outline-color: var(--brand); }
+.theme-admin .flow-step:not(:last-child)::after { background: var(--line); }
+.theme-admin :is(.danger, .error-text) { color: #ffadb2; }
+.theme-admin :is(.alert.error, .badge.red) { background: #49242a; color: #ffc3c8; }
+.theme-admin :is(.alert.success, .badge.green) { background: #19392c; color: #b6f2cc; }
+.theme-admin .badge.amber { background: #433019; color: #ffdda6; }

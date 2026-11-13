@@ -172,11 +172,12 @@ def workshop_tv_data():
             selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user))
         .order_by(Order.due_date.asc().nulls_last(),Order.id)).all()
     deadlines={order.id: tv_deadline(order) for order in orders}
+    overdue_ids = {order_id for order_id, due in deadlines.items() if due and due < day}
     orders.sort(key=lambda order: (deadlines[order.id] is None, deadlines[order.id], order.id))
     return jsonify(
         open=len(orders),
-        late=sum(1 for due in deadlines.values() if due and due<day),
-        html=render_template('workshop_tv_cards.html',orders=orders,day=day,deadlines=deadlines),
+        late=len(overdue_ids),
+        html=render_template('workshop_tv_cards.html',orders=orders,day=day,deadlines=deadlines,overdue_ids=overdue_ids),
     )
 
 

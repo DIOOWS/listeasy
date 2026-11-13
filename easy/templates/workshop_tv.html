@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel da Oficina · Modo TV</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=9) }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=12) }}">
 <script src="{{ url_for('static',filename='workshop_tv.js',v=5) }}" defer></script>
 </head>
-<body>
+<body class="{{ 'tv-admin' if current_user.role == 'admin' else 'tv-team' }}">
 <header class="tv-header">
   <div class="tv-brand"><img src="{{ url_for('static',filename='logo.png') }}" alt=""><h1>Painel da Oficina <span>· Modo TV</span></h1></div>
   <nav>
@@ -24,7 +24,9 @@
 </header>
 <main id="tv" data-url="{{ url_for('web.workshop_tv_data') }}">
   <section class="tv-overview">
-    <div><h2>Veículos em atendimento</h2><p id="sync" role="status">Carregando ordens de serviço…</p></div>
+    <div><h2>Veículos em atendimento</h2>
+      <p class="tv-profile">{{ 'Administrador' if current_user.role == 'admin' else 'Equipe' }} · {{ current_user.name }}</p>
+      <p id="sync" role="status">Carregando ordens de serviço…</p></div>
     <div class="tv-counts"><div><strong id="open">—</strong> OS abertas</div><div class="late"><strong id="late">—</strong> em atraso</div></div>
   </section>
   <div id="cards"><p class="tv-empty">Buscando atendimentos…</p></div>
