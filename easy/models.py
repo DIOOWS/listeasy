@@ -120,7 +120,7 @@ class Order(db.Model):
     @property
     def status_tone(self):
         return {'Aguardando avaliação':'gray', 'Aguardando aprovação':'amber',
-                'Aguardando peças':'orange', 'Em serviço':'blue', 'Aprovado':'pink', 'Faturado':'purple', 'Recebido':'indigo',
+                'Aguardando peças':'orange', 'Em serviço':'blue', 'Aprovado':'lime', 'Faturado':'purple', 'Recebido':'indigo',
                 'Pronto para entrega':'teal', 'Entregue':'green', 'Cancelada':'red'}.get(self.status,'gray')
     @property
     def flow_tone(self):

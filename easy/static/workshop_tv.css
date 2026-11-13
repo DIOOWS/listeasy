@@ -77,7 +77,7 @@ main{padding-top:.65rem;padding-bottom:.65rem}
 .tv-card.status-orange{--tv-status-color:#9a3b0c}
 .tv-card.status-teal{--tv-status-color:#09666a}
 .tv-card.status-green{--tv-status-color:#176534}
-.tv-card.status-pink{--tv-status-color:#9a2867}
+.tv-card.status-lime{--tv-status-color:#3f6212}
 .tv-card.status-indigo{--tv-status-color:#4338a0}
 .tv-card.status-purple{--tv-status-color:#7138a0}
 .tv-card.status-red{--tv-status-color:#b4232e}
@@ -97,7 +97,7 @@ main{padding-top:.65rem;padding-bottom:.65rem}
 .tv-card.status-orange{--tv-border-bright:#f97316}
 .tv-card.status-teal{--tv-border-bright:#14b8a6}
 .tv-card.status-green{--tv-border-bright:#22c55e}
-.tv-card.status-pink{--tv-border-bright:#ec4899}
+.tv-card.status-lime{--tv-border-bright:#84cc16}
 .tv-card.status-indigo{--tv-border-bright:#818cf8}
 .tv-card.status-purple{--tv-border-bright:#ae55ff}
 .tv-card.status-red{--tv-border-bright:#ff2947}
@@ -190,3 +190,15 @@ main{padding-top:.65rem;padding-bottom:.65rem}
 .tv-overview h2 { color: #fff; }
 .tv-overview :is(.tv-profile, #sync),
 .tv-footer #page { color: #e5edf8; }
+
+#tv-pagination button {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #13243b;
+  font-weight: 700;
+}
+#tv-pagination button:hover:not(:disabled) { background: #dbeafe; }
+#tv-pagination button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
