@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db, limiter, today
 from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, ENTRY_CHECKS, EXIT_CHECKS, utcnow
-from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm, ServiceForm, WorkshopDeadlineForm
+from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm, ServiceForm
 
 from .media import configure_photos, prepare_image, save_image, serve_image
 
@@ -160,23 +160,6 @@ def tv_deadline(order):
     if current_user.role == 'admin':
         return order.due_date
     return order.workshop_due_date or order.due_date
-
-
-@web.route('/modo-tv/os/<int:ident>/prazo', methods=['GET','POST'])
-@admin_required
-def workshop_deadline(ident):
-    order = get_order(ident)
-    form = WorkshopDeadlineForm(obj=order)
-    if form.validate_on_submit():
-        mutable(order)
-        order.workshop_due_date = form.workshop_due_date.data
-        db.session.commit()
-        flash('Prazo da oficina atualizado.', 'success')
-        return redirect(url_for('web.workshop_tv'))
-    if request.method == 'GET':
-        form.version.data = str(order.version)
-    return render_template('form.html', form=form, title=f'Programar prazo da oficina · {order.number or order.id}',
-        back=url_for('web.workshop_tv'), help_text='Deixe em branco para a oficina usar o prazo real de entrega.')
 
 
 @web.get('/modo-tv/dados')
@@ -377,6 +360,8 @@ def order_edit(ident):
         mutable(order)
         if validate_order(form,order) and prepare_image('cover',form.cover_file):
             number=(form.number.data or order.number).strip().upper();populate_order(form,order);order.number=number
+            if form.workshop_due_date.raw_data:
+                order.workshop_due_date = form.workshop_due_date.data
             save_image(order,'cover',form.cover_file,form.remove_cover.data)
             event(order,'Dados da OS atualizados.');db.session.commit();flash('OS atualizada.','success')
             return redirect(url_for('web.order_detail',ident=ident))

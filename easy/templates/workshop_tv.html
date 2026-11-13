@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel da Oficina · Modo TV</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=7) }}">
-<script src="{{ url_for('static',filename='workshop_tv.js',v=4) }}" defer></script>
+<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=9) }}">
+<script src="{{ url_for('static',filename='workshop_tv.js',v=5) }}" defer></script>
 </head>
 <body>
 <header class="tv-header">
@@ -28,7 +28,11 @@
     <div class="tv-counts"><div><strong id="open">—</strong> OS abertas</div><div class="late"><strong id="late">—</strong> em atraso</div></div>
   </section>
   <div id="cards"><p class="tv-empty">Buscando atendimentos…</p></div>
-  <div class="tv-footer"><span id="page"></span><span id="rotation">Atualização automática a cada 10 segundos</span></div>
+  <nav class="tv-footer" id="tv-pagination" aria-label="Páginas de ordens de serviço">
+    <button id="page-back" type="button" aria-label="Página anterior" disabled>←</button>
+    <span id="page" role="status"></span>
+    <button id="page-next" type="button" aria-label="Próxima página" disabled>→</button>
+  </nav>
   <noscript>Ative o JavaScript para acompanhar as OS em tempo real.</noscript>
 </main>
 </body>

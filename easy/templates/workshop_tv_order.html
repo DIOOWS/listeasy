@@ -10,9 +10,8 @@
     <div><dt>Entrada</dt><dd>{{ order.entered_at|localtime if order.entered_at else order.entry_date|datebr }}</dd></div>
     {% if current_user.role == 'admin' %}
     <div><dt>Prazo real de entrega</dt><dd>{{ due|datebr }}</dd></div>
-    <div><dt>Prazo da oficina</dt><dd>{{ order.workshop_due_date|datebr if order.workshop_due_date else 'Usa o prazo real' }} · <a href="{{ url_for('web.workshop_deadline',ident=order.id) }}">Programar prazo</a></dd></div>
     {% else %}
-    <div><dt>Prazo da oficina</dt><dd>{{ due|datebr }}</dd></div>
+    <div><dt>Prazo de entrega</dt><dd>{{ due|datebr }}</dd></div>
     {% endif %}
     <div><dt>Saída</dt><dd>{{ order.delivered_at|localtime if order.delivered_at else order.delivered_date|datebr }}</dd></div>
     <div><dt>Responsável</dt><dd>{{ order.responsible or '—' }}</dd></div>

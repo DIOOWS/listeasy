@@ -8,6 +8,8 @@
 <h2>Foto do veículo</h2>
 {% if order and order.cover_key %}<img class="order-cover-preview" src="{{ url_for('web.order_cover',ident=order.id,v=order.cover_key) }}" alt="Foto principal atual do veículo">{% endif %}
 <div class="form-grid">{{ field(form.cover_file) }}{% if order and order.cover_key %}{{ field(form.remove_cover) }}{% endif %}</div>
-<h2>Atendimento</h2><p class="os-form-help">A entrada registra o horário automaticamente ao salvar a OS. O prazo continua opcional.</p><div class="form-grid">{{ field(form.number) }}{{ field(form.responsible) }}{{ field(form.entry_date) }}{{ field(form.due_date) }}{{ field(form.problem) }}{{ field(form.diagnosis) }}{{ field(form.notes) }}</div>
+<h2>Atendimento</h2><p class="os-form-help">A entrada registra o horário automaticamente ao salvar a OS.</p>
+{% if order %}<p class="os-form-help">A previsão de entrega aparece para o Administrador. O prazo da oficina aparece para a Equipe. Se ficar em branco, a Equipe verá a previsão de entrega.</p>{% endif %}
+<div class="form-grid">{{ field(form.number) }}{{ field(form.responsible) }}{{ field(form.entry_date) }}{{ field(form.due_date) }}{% if order %}{{ field(form.workshop_due_date) }}{% endif %}{{ field(form.problem) }}{{ field(form.diagnosis) }}{{ field(form.notes) }}</div>
 <div class="actions"><button class="button">Salvar OS</button><a class="button secondary" href="{{ back }}">Cancelar</a></div>
 </form>{% endif %}{% endblock %}

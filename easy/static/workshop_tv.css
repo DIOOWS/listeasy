@@ -27,7 +27,10 @@ h2{font-size:1.45rem}
 dl>div{display:grid;grid-template-columns:5.1rem minmax(0,1fr);gap:.35rem;padding:.16rem 0;font-size:.83rem}
 dt{color:#44566e;font-weight:650}dd{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .overdue dl>div:last-child dd{font-weight:800;color:#911d24}
-.tv-footer{margin-top:.6rem}
+.tv-footer{margin-top:.6rem;justify-content:center}
+.tv-footer button{min-width:2.75rem;min-height:2.75rem;font-size:1.2rem;line-height:1}
+.tv-footer button:disabled{opacity:.45;cursor:default}
+.tv-footer #page{min-width:6.5rem;text-align:center;font-weight:700}
 .tv-empty{background:white;border-radius:.6rem;padding:2rem;text-align:center}
 @media(max-width:850px){.tv-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tv-overview{align-items:flex-start;flex-direction:column}}
 @media(max-width:520px){.tv-grid{grid-template-columns:1fr}.tv-header{flex-wrap:wrap}}
@@ -130,12 +133,21 @@ main{padding-top:.65rem;padding-bottom:.65rem}
 .tv-detail-photo img{display:block;width:100%;height:clamp(10rem,46vh,25rem);object-fit:contain}
 .tv-detail-photo figcaption{margin-top:.35rem;color:#172438;font-size:.74rem;font-weight:700}
 
-/* Destaca o cartão inteiro sem prejudicar a leitura dos detalhes. */
-.tv-card.overdue:not([open]){background:#ffdbde;animation:tv-overdue-pulse 2.2s ease-in-out infinite}
-.tv-card.overdue .tv-border-track{display:none}
-@keyframes tv-overdue-pulse{
-  0%,100%{background-color:#ffdbde}
-  50%{background-color:#ff8e97}
+/* Pulsa o fundo dos cartões fechados na cor do status. */
+.tv-card:not([open]){
+  --tv-pulse-start:color-mix(in srgb,var(--tv-border-bright) 13%,white);
+  --tv-pulse-peak:color-mix(in srgb,var(--tv-border-bright) 32%,white);
+  background-color:var(--tv-pulse-start);
+  animation:tv-status-pulse 2.2s ease-in-out infinite;
 }
-.tv-grid:has(.tv-card[open]) .tv-card.overdue{animation-play-state:paused}
-@media(prefers-reduced-motion:reduce){.tv-card.overdue:not([open]){animation:none}}
+.tv-card.overdue{
+  --tv-pulse-start:#ffdbde;
+  --tv-pulse-peak:#ff8e97;
+}
+.tv-card.overdue .tv-border-track{display:none}
+@keyframes tv-status-pulse{
+  0%,100%{background-color:var(--tv-pulse-start)}
+  50%{background-color:var(--tv-pulse-peak)}
+}
+.tv-grid:has(.tv-card[open]) .tv-card{animation-play-state:paused}
+@media(prefers-reduced-motion:reduce){.tv-card:not([open]){animation:none}}

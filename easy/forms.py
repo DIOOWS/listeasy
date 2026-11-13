@@ -33,6 +33,7 @@ class OrderForm(FlaskForm):
     fleet = StringField('Número da frota (opcional)', validators=[Optional(), Length(max=40)])
     entry_date = DateField('Data de entrada (opcional)', validators=[Optional()])
     due_date = DateField('Previsão de entrega (opcional)', validators=[Optional()])
+    workshop_due_date = DateField('Prazo da oficina (opcional)', validators=[Optional()])
     mileage = IntegerField('Quilometragem', validators=[Optional(), NumberRange(min=0, max=2147483647)])
     responsible = StringField('Responsável pelo atendimento', validators=[Optional(), Length(max=120)])
     problem = TextAreaField('Problema relatado / solicitação', validators=[Optional(), Length(max=10000)])
@@ -82,8 +83,3 @@ class UserForm(FlaskForm):
     password = PasswordField('Senha (mínimo 6 caracteres; vazio mantém a atual)', validators=[Optional(), Length(min=6,max=128)])
     role = SelectField('Perfil', choices=[('equipe','Equipe'),('admin','Administrador')])
     active = BooleanField('Usuário ativo', default=True)
-
-
-class WorkshopDeadlineForm(FlaskForm):
-    workshop_due_date = DateField('Prazo da oficina', validators=[Optional()])
-    version = HiddenField()

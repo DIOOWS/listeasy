@@ -61,8 +61,10 @@ def test_team_uses_read_only_tv_with_workshop_deadline(client, app):
         order.due_date = real_due
         db.session.commit()
 
-    deadline_url = f'/modo-tv/os/{ident}/prazo'
-    assert client.post(deadline_url, data={
+    edit_url = f'/ordens/{ident}/editar'
+    assert 'Prazo da oficina (opcional)' in client.get(edit_url).text
+    assert client.post(edit_url, data={
+        'client_id': 1, 'due_date': real_due.isoformat(),
         'workshop_due_date': workshop_due.isoformat(), 'version': version(app, ident)
     }).status_code == 302
     assert client.get('/modo-tv/dados').get_json()['late'] == 0
@@ -75,15 +77,24 @@ def test_team_uses_read_only_tv_with_workshop_deadline(client, app):
     assert team.get('/login').location == '/modo-tv'
     panel = team.get('/modo-tv').text
     assert 'Sair' in panel and 'Voltar' not in panel
-    for path in ('/ordens', f'/ordens/{ident}/editar', '/clientes', '/relatorios/exportar', deadline_url):
+    for path in ('/ordens', f'/ordens/{ident}/editar', '/clientes', '/relatorios/exportar'):
         assert team.get(path).status_code == 403
-    for path in (f'/ordens/{ident}/editar', f'/ordens/{ident}/status', deadline_url):
+    for path in (f'/ordens/{ident}/editar', f'/ordens/{ident}/status'):
         assert team.post(path).status_code == 403
     cards = team.get('/modo-tv/dados').get_json()
     assert cards['late'] == 1 and 'status-red overdue' in cards['html']
+    assert 'Prazo de entrega' in cards['html']
+    assert 'Prazo da oficina' not in cards['html']
     details = team.get(f'/modo-tv/os/{ident}').text
     assert workshop_due.strftime('%d/%m/%Y') in details
     assert real_due.strftime('%d/%m/%Y') not in details
     assert 'Programar prazo' not in details
+    assert 'Programar prazo' not in client.get(f'/modo-tv/os/{ident}').text
+    assert workshop_due.isoformat() in client.get(edit_url).text
+    assert client.post(edit_url, data={
+        'client_id': 1, 'due_date': real_due.isoformat(), 'workshop_due_date': '',
+        'version': version(app, ident),
+    }).status_code == 302
+    assert real_due.strftime('%d/%m/%Y') in team.get(f'/modo-tv/os/{ident}').text
     assert team.post('/logout').location == '/login'
     assert team.get('/modo-tv').status_code == 302

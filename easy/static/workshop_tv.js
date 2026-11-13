@@ -3,24 +3,27 @@
   const cards = document.getElementById('cards');
   const sync = document.getElementById('sync');
   const page = document.getElementById('page');
-  const rotation = document.getElementById('rotation');
+  const pagination = document.getElementById('tv-pagination');
+  const backPage = document.getElementById('page-back');
+  const nextPage = document.getElementById('page-next');
   const fullscreen = document.getElementById('fullscreen');
   const clock = new Intl.DateTimeFormat('pt-BR', {timeStyle: 'medium', timeZone: 'America/Sao_Paulo'});
   let previous = null;
   let pending = null;
   let index = 0;
   let capacity = 1;
-  let rotationTimer;
+  let pageCount = 0;
 
   const expanded = () => cards.querySelector('.tv-card[open]');
 
-  function showPage(advance = false) {
+  function showPage() {
     if (expanded()) return;
     const orders = Array.from(cards.querySelectorAll('.tv-card'));
-    const pages = Math.ceil(orders.length / capacity);
-    index = pages ? (index + Number(advance)) % pages : 0;
+    pageCount = Math.ceil(orders.length / capacity);
+    index = Math.min(index, Math.max(0, pageCount - 1));
     orders.forEach((order, i) => { order.hidden = Math.floor(i / capacity) !== index; });
-    page.textContent = pages > 1 ? `Página ${index + 1} de ${pages}` : '';
+    page.textContent = pageCount > 1 ? `Página ${index + 1} de ${pageCount}` : '';
+    updateNavigation();
   }
 
   function fitPage() {
@@ -34,7 +37,7 @@
       // Measure one row at its real column width, even on the last page.
       orders.forEach((order, i) => { order.hidden = i >= columns; });
       const height = Math.max(...orders.slice(0, columns).map(order => order.getBoundingClientRect().height));
-      const footerSpace = rotation.closest('.tv-footer').getBoundingClientRect().height + 32;
+      const footerSpace = pagination.getBoundingClientRect().height + 32;
       const available = window.innerHeight - grid.getBoundingClientRect().top - footerSpace;
       const rows = height ? Math.max(1, Math.floor((available + gap + 1) / (height + gap))) : 1;
       capacity = Math.min(18, columns * rows);
@@ -42,10 +45,22 @@
     showPage();
   }
 
-  function restartRotation() {
-    clearInterval(rotationTimer);
-    if (!expanded()) rotationTimer = setInterval(() => showPage(true), 15000);
+  function updateNavigation() {
+    const locked = Boolean(expanded());
+    backPage.disabled = locked || index === 0;
+    nextPage.disabled = locked || index + 1 >= pageCount;
   }
+
+  function movePage(step) {
+    if (expanded()) return;
+    const destination = index + step;
+    if (destination < 0 || destination >= pageCount) return;
+    index = destination;
+    showPage();
+  }
+
+  backPage.addEventListener('click', () => movePage(-1));
+  nextPage.addEventListener('click', () => movePage(1));
 
   function render(html) {
     if (html === previous) return;
@@ -59,14 +74,12 @@
   }
 
   function resumePanel() {
-    rotation.textContent = 'Atualização automática a cada 10 segundos';
     if (pending !== null) {
       const html = pending;
       pending = null;
       render(html);
     }
     fitPage();
-    restartRotation();
   }
 
   cards.addEventListener('toggle', event => {
@@ -76,8 +89,7 @@
       cards.querySelectorAll('.tv-card[open]').forEach(other => {
         if (other !== order) other.open = false;
       });
-      rotation.textContent = 'Troca de página pausada · OS aberta';
-      restartRotation();
+      updateNavigation();
     } else if (!expanded()) {
       resumePanel();
     }
@@ -119,7 +131,7 @@
           document.getElementById('open').textContent = '—';
           document.getElementById('late').textContent = '—';
           sync.textContent = 'Entre novamente para atualizar o painel.';
-          page.textContent = '';
+          showPage();
         }
         return;
       }
@@ -157,6 +169,5 @@
       fitPage();
     });
   }
-  restartRotation();
   refresh();
 })();
