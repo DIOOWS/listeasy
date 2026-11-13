@@ -82,3 +82,8 @@ class UserForm(FlaskForm):
     password = PasswordField('Senha (mínimo 6 caracteres; vazio mantém a atual)', validators=[Optional(), Length(min=6,max=128)])
     role = SelectField('Perfil', choices=[('equipe','Equipe'),('admin','Administrador')])
     active = BooleanField('Usuário ativo', default=True)
+
+
+class WorkshopDeadlineForm(FlaskForm):
+    workshop_due_date = DateField('Prazo da oficina', validators=[Optional()])
+    version = HiddenField()

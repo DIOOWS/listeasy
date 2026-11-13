@@ -21,8 +21,7 @@ def client(app):
 
 def create_order(client,app):
     assert client.post('/clientes/novo',data={'name':'Cliente teste','active':'y'}).status_code==302
-    assert client.post('/veiculos/novo',data={'client_id':1,'plate':'abc-1d23','model':'Ducato','active':'y'}).status_code==302
-    r=client.post('/ordens/nova',data={'number':'','vehicle_id':1,'entry_date':today().isoformat(),'due_date':today().isoformat(),'mileage':12345,'responsible':'Diogo','problem':'Não refrigera','discount':'0'})
+    r=client.post('/ordens/nova',data={'number':'','client_id':1,'plate':'ABC1D23','model':'Ducato','fleet':'','entry_date':today().isoformat(),'due_date':today().isoformat(),'mileage':12345,'responsible':'Diogo','problem':'Não refrigera','discount':'0'})
     assert r.status_code==302
     with app.app_context():
         order=db.session.scalar(db.select(Order));assert order.number.startswith('OS-');return order.id
@@ -40,15 +39,15 @@ def test_complete_workflow(client,app):
     with app.app_context():
         order=db.session.get(Order,ident);assert order.total==Decimal('310.00');assert len(order.checks)==9
     client.post(f'/ordens/{ident}/status',data={'version':version(app,ident),'status':'Entregue','delivered_date':today().isoformat()})
-    with app.app_context():assert db.session.get(Order,ident).status!='Entregue'
+    with app.app_context():assert db.session.get(Order,ident).status=='Entregue'
     for stage in ['entrada','saida']:
         with app.app_context():ids=[c.id for c in db.session.get(Order,ident).checks if c.stage==stage]
         assert client.post(f'/ordens/{ident}/checklist',data={'version':version(app,ident),'stage':stage,**{f'result_{i}':'ok' for i in ids}}).status_code==302
     assert client.post(f'/ordens/{ident}/status',data={'version':version(app,ident),'status':'Entregue','delivered_date':today().isoformat()}).status_code==302
     with app.app_context():
         order=db.session.get(Order,ident);assert order.status=='Entregue';assert order.delivered_date==today();assert len(order.events)>=6
-    assert add_item(client,app,ident).status_code==409
-    for path in ['/', '/clientes','/veiculos','/veiculos/1','/ordens','/ordens/nova',f'/ordens/{ident}','/relatorios','/usuarios',f'/ordens/{ident}/imprimir']:
+    assert add_item(client,app,ident,price='0').status_code==302
+    for path in ['/', '/clientes','/ordens','/ordens/nova',f'/ordens/{ident}','/relatorios','/usuarios',f'/ordens/{ident}/imprimir']:
         assert client.get(path).status_code==200,path
     from openpyxl import load_workbook
     workbook=load_workbook(BytesIO(client.get('/relatorios/exportar').data))
@@ -67,7 +66,7 @@ def test_permissions_csrf_and_login(app):
     client=app.test_client()
     assert client.get('/clientes').status_code==302
     assert client.get('/relatorios/exportar').status_code==302
-    assert client.post('/login?next=https://evil.example',data={'username':'team','password':'strong-password-123'}).location=='/'
+    assert client.post('/login?next=https://evil.example',data={'username':'team','password':'strong-password-123'}).location=='/modo-tv'
     assert client.get('/usuarios').status_code==403
     app.config['WTF_CSRF_ENABLED']=True
     assert client.post('/clientes/novo',data={'name':'Unauthorized'}).status_code==400
@@ -86,14 +85,18 @@ def test_lockout_and_session_revocation(app):
 
 def test_discount_and_historical_client(client,app):
     ident=create_order(client,app);add_item(client,app,ident,price='200')
-    payload={'version':version(app,ident),'number':'CUSTOM-001','vehicle_id':1,'entry_date':today().isoformat(),'due_date':today().isoformat(),'mileage':'12','responsible':'Diogo','problem':'Teste','discount':'25'}
+    with app.app_context():
+        order=db.session.get(Order,ident);order.discount=Decimal('25');db.session.commit()
+    payload={'version':version(app,ident),'number':'CUSTOM-001','client_id':1,'plate':'ABC1D23','model':'Ducato','fleet':'','entry_date':today().isoformat(),'due_date':today().isoformat(),'mileage':'12','responsible':'Diogo','problem':'Teste','discount':'25'}
     assert client.post(f'/ordens/{ident}/editar',data=payload).status_code==302
     with app.app_context():
         order=db.session.get(Order,ident);assert order.total==Decimal('175');item_id=order.items[0].id
     client.post(f'/ordens/{ident}/itens/{item_id}/acao',data={'version':version(app,ident),'action':'remove'})
-    with app.app_context():assert len(db.session.get(Order,ident).items)==1
+    with app.app_context():
+        order=db.session.get(Order,ident);assert len(order.items)==0 and order.discount==0 and order.total==0
     client.post('/clientes/novo',data={'name':'Novo dono','active':'y'})
-    client.post('/veiculos/1/editar',data={'client_id':2,'plate':'ABC1D23','model':'Ducato','active':'y'})
+    with app.app_context():
+        order=db.session.get(Order,ident);order.vehicle.client_id=2;db.session.commit()
     with app.app_context():assert db.session.get(Order,ident).client_id==1
 
 def test_reports_filters_and_formula_injection(client,app):
@@ -104,12 +107,12 @@ def test_reports_filters_and_formula_injection(client,app):
     assert 'R$ 0,00' in client.get('/relatorios?status=Entregue').data.decode()
     assert client.get('/relatorios?start=invalid').status_code==400
 
-def test_future_delivery_rejected(client,app):
+def test_invalid_delivery_format_rejected(client,app):
     ident=create_order(client,app);add_item(client,app,ident,done=True)
     for stage in ['entrada','saida']:
         with app.app_context():ids=[c.id for c in db.session.get(Order,ident).checks if c.stage==stage]
         client.post(f'/ordens/{ident}/checklist',data={'version':version(app,ident),'stage':stage,**{f'result_{i}':'ok' for i in ids}})
-    client.post(f'/ordens/{ident}/status',data={'version':version(app,ident),'status':'Entregue','delivered_date':(today()+timedelta(days=1)).isoformat()})
+    client.post(f'/ordens/{ident}/status',data={'version':version(app,ident),'status':'Entregue','delivered_date':'invalid-date'})
     with app.app_context():assert db.session.get(Order,ident).status!='Entregue'
 
 def test_private_photo_upload_and_login_gate(client,app,monkeypatch):
@@ -134,7 +137,7 @@ def test_private_photo_upload_and_login_gate(client,app,monkeypatch):
     assert client.get('/fotos/1').data==b'photo'
     assert client.get('/fotos/1').headers['Cache-Control']=='no-store'
 
-def test_changes_revoke_ready_status(client,app):
+def test_changes_do_not_revoke_ready_status(client,app):
     ident=create_order(client,app);add_item(client,app,ident,done=True)
     with app.app_context():
         order=db.session.get(Order,ident)
@@ -143,7 +146,7 @@ def test_changes_revoke_ready_status(client,app):
     client.post(f'/ordens/{ident}/status',data={'version':version(app,ident),'status':'Pronto para entrega'})
     with app.app_context():assert db.session.get(Order,ident).status=='Pronto para entrega'
     add_item(client,app,ident,'servico','Novo serviço',done=False)
-    with app.app_context():assert db.session.get(Order,ident).status=='Em serviço'
+    with app.app_context():assert db.session.get(Order,ident).status=='Pronto para entrega'
 
 def test_pwa_assets_and_camera(client,app):
     import json

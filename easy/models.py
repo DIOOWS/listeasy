@@ -74,6 +74,7 @@ class Order(db.Model):
     vehicle_fleet = db.Column(db.String(40))
     entry_date = db.Column(db.Date, nullable=True, index=True)
     due_date = db.Column(db.Date, nullable=True, index=True)
+    workshop_due_date = db.Column(db.Date, nullable=True)
     delivered_date = db.Column(db.Date)
     approved_date = db.Column(db.Date)
     started_date = db.Column(db.Date)

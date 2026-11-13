@@ -12,12 +12,25 @@ from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db, limiter, today
 from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, ENTRY_CHECKS, EXIT_CHECKS, utcnow
-from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm, ServiceForm
+from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm, ServiceForm, WorkshopDeadlineForm
 
 from .media import configure_photos, prepare_image, save_image, serve_image
 
 web=Blueprint('web',__name__)
 DUMMY_HASH=generate_password_hash('dummy-password-never-a-login')
+
+TEAM_ENDPOINTS = frozenset({
+    'web.login', 'web.logout', 'web.dashboard', 'web.service_worker',
+    'web.workshop_tv', 'web.workshop_tv_data', 'web.workshop_tv_order',
+    'web.order_cover', 'web.client_logo', 'web.photo_view',
+})
+
+
+@web.before_request
+def restrict_team_to_workshop():
+    if request.endpoint not in TEAM_ENDPOINTS and current_user.is_authenticated and current_user.role == 'equipe':
+        abort(403)
+
 
 def admin_required(fn):
     @wraps(fn)
@@ -91,7 +104,8 @@ def validate_order(form,order=None):
 @web.route('/login',methods=['GET','POST'])
 @limiter.limit('10 per minute')
 def login():
-    if current_user.is_authenticated:return redirect(url_for('web.dashboard'))
+    if current_user.is_authenticated:
+        return redirect(url_for('web.workshop_tv' if current_user.role == 'equipe' else 'web.dashboard'))
     form=LoginForm()
     if form.validate_on_submit():
         username=form.username.data.strip().lower()
@@ -100,6 +114,8 @@ def login():
         if user and user.active and valid and (not user.locked_until or user.locked_until<=utcnow()):
             user.failures=0;user.locked_until=None;db.session.commit()
             session.clear();login_user(user,remember=False);session.permanent=True
+            if user.role == 'equipe':
+                return redirect(url_for('web.workshop_tv'))
             target=request.args.get('next','')
             parsed=urlsplit(target)
             return redirect(target if target.startswith('/') and not target.startswith('//') and not parsed.netloc and not parsed.scheme and '\\' not in target else url_for('web.dashboard'))
@@ -119,6 +135,8 @@ def logout():
 @web.get('/')
 @login_required
 def dashboard():
+    if current_user.role == 'equipe':
+        return redirect(url_for('web.workshop_tv'))
     active=Order.deleted_at.is_(None) & ~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada'])
     pending_finance=Order.deleted_at.is_(None) & Order.status.in_(['Entregue','Faturado']) & Order.received_date.is_(None)
     day=today()
@@ -138,6 +156,29 @@ def workshop_tv():
     return render_template('workshop_tv.html')
 
 
+def tv_deadline(order):
+    if current_user.role == 'admin':
+        return order.due_date
+    return order.workshop_due_date or order.due_date
+
+
+@web.route('/modo-tv/os/<int:ident>/prazo', methods=['GET','POST'])
+@admin_required
+def workshop_deadline(ident):
+    order = get_order(ident)
+    form = WorkshopDeadlineForm(obj=order)
+    if form.validate_on_submit():
+        mutable(order)
+        order.workshop_due_date = form.workshop_due_date.data
+        db.session.commit()
+        flash('Prazo da oficina atualizado.', 'success')
+        return redirect(url_for('web.workshop_tv'))
+    if request.method == 'GET':
+        form.version.data = str(order.version)
+    return render_template('form.html', form=form, title=f'Programar prazo da oficina · {order.number or order.id}',
+        back=url_for('web.workshop_tv'), help_text='Deixe em branco para a oficina usar o prazo real de entrega.')
+
+
 @web.get('/modo-tv/dados')
 @login_required
 def workshop_tv_data():
@@ -147,7 +188,8 @@ def workshop_tv_data():
         .options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),
             selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user))
         .order_by(Order.due_date.asc().nulls_last(),Order.id)).all()
-    deadlines={order.id: order.due_date-timedelta(days=1) if order.due_date else None for order in orders}
+    deadlines={order.id: tv_deadline(order) for order in orders}
+    orders.sort(key=lambda order: (deadlines[order.id] is None, deadlines[order.id], order.id))
     return jsonify(
         open=len(orders),
         late=sum(1 for due in deadlines.values() if due and due<day),
@@ -161,7 +203,7 @@ def workshop_tv_order(ident):
     order=get_order(ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),
         selectinload(Order.items),selectinload(Order.checks),selectinload(Order.photos),
         selectinload(Order.events).joinedload(Event.user)])
-    return render_template('workshop_tv_order.html',order=order)
+    return render_template('workshop_tv_order.html',order=order,due=tv_deadline(order))
 
 
 

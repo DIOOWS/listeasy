@@ -4,13 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel da Oficina · Modo TV</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=6) }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=7) }}">
 <script src="{{ url_for('static',filename='workshop_tv.js',v=4) }}" defer></script>
 </head>
 <body>
 <header class="tv-header">
   <div class="tv-brand"><img src="{{ url_for('static',filename='logo.png') }}" alt=""><h1>Painel da Oficina <span>· Modo TV</span></h1></div>
-  <nav><button id="fullscreen" type="button" hidden>Tela cheia</button><a href="{{ url_for('web.dashboard') }}">Voltar</a></nav>
+  <nav>
+    <button id="fullscreen" type="button" hidden>Tela cheia</button>
+    {% if current_user.role == 'admin' %}
+      <a href="{{ url_for('web.dashboard') }}">Voltar</a>
+    {% else %}
+      <form method="post" action="{{ url_for('web.logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Sair</button>
+      </form>
+    {% endif %}
+  </nav>
 </header>
 <main id="tv" data-url="{{ url_for('web.workshop_tv_data') }}">
   <section class="tv-overview">

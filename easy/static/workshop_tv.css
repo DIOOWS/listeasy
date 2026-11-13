@@ -129,3 +129,13 @@ main{padding-top:.65rem;padding-bottom:.65rem}
 .tv-detail-photo a{display:block;border-radius:.45rem;overflow:hidden;background:#edf2f7}
 .tv-detail-photo img{display:block;width:100%;height:clamp(10rem,46vh,25rem);object-fit:contain}
 .tv-detail-photo figcaption{margin-top:.35rem;color:#172438;font-size:.74rem;font-weight:700}
+
+/* Destaca o cartão inteiro sem prejudicar a leitura dos detalhes. */
+.tv-card.overdue:not([open]){background:#ffdbde;animation:tv-overdue-pulse 2.2s ease-in-out infinite}
+.tv-card.overdue .tv-border-track{display:none}
+@keyframes tv-overdue-pulse{
+  0%,100%{background-color:#ffdbde}
+  50%{background-color:#ff8e97}
+}
+.tv-grid:has(.tv-card[open]) .tv-card.overdue{animation-play-state:paused}
+@media(prefers-reduced-motion:reduce){.tv-card.overdue:not([open]){animation:none}}
