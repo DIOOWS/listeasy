@@ -202,7 +202,22 @@ main{padding-top:.65rem;padding-bottom:.65rem}
   border-color: #cbd5e1;
 }
 .tv-overview h2, .tv-profile, #sync, .tv-footer #page { color: #fff; }
-.tv-footer { gap: 1rem; }
+/* Mantém a navegação perto da base, após os cards quando a lista cresce. */
+.tv-admin,
+.tv-team {
+  display: flex;
+  flex-direction: column;
+}
+#tv {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.tv-footer {
+  gap: 1rem;
+  margin-top: auto;
+  padding-top: .6rem;
+}
 .tv-footer #page { min-width: 3.5rem; }
 #tv-pagination button { display: grid; place-items: center; padding: .25rem; }
 #tv-pagination svg {
