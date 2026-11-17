@@ -152,7 +152,8 @@ class Order(db.Model):
         current={'Aguardando avaliação':0,'Aguardando aprovação':1,'Aprovado':1,
                  'Aguardando peças':2,'Em serviço':2,'Pronto para entrega':3,
                  'Entregue':4,'Faturado':5,'Recebido':6}.get(self.status)
-        return [dict(label=label,date=day,timestamp=self.status_changed_at if index==current and self.status_changed_at else stamp,
+        return [dict(label=label,date=day,timestamp=(self.status_changed_at if index == current and self.status in
+                           ('Aguardando avaliação', 'Aguardando aprovação', 'Aguardando peças') else stamp),
                      state='current' if index==current else 'done' if done else 'pending')
                 for index,(label,day,stamp,done) in enumerate(steps)]
 

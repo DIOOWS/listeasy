@@ -397,14 +397,32 @@ def order_delete(ident):
     flash('OS excluída.','success')
     return redirect(url_for('web.orders'))
 
+FLOW_CORRECTIONS = {
+    'clear_approval': ('Aprovado', 'approved', 'aprovação'),
+    'clear_start': ('Em serviço', 'started', 'início do serviço'),
+    'clear_ready': ('Pronto para entrega', 'ready', 'pronto para entrega'),
+    'clear_delivery': ('Entregue', 'delivered', 'entrega'),
+    'clear_invoice': ('Faturado', 'invoiced', 'faturamento'),
+    'clear_received': ('Recebido', 'received', 'recebimento'),
+}
+
+
+def configure_flow_correction(form):
+    form.action.choices += [(action, label.capitalize()) for action, (_, _, label) in FLOW_CORRECTIONS.items()]
+    form.corrected_status.choices = [('', 'Manter status atual')] + [(status, status) for status in STATUSES]
+
+
 @web.get('/ordens/<int:ident>')
 @login_required
 def order_detail(ident):
     order=get_order(ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user)])
     status_form=StatusForm(status=order.status,version=str(order.version),delivered_date=order.delivered_date or today());status_form.status.choices=[(x,x) for x in STATUSES]
-    flow_form=FlowForm(version=str(order.version),action_date=today())
-    if current_user.role=='admin':
-        flow_form.action.choices += [('clear_approval','Corrigir: remover aprovação'),('clear_invoice','Corrigir: remover faturamento'),('clear_received','Corrigir: remover recebimento')]
+    flow_form = FlowForm(version=str(order.version))
+    configure_flow_correction(flow_form)
+    flow_form.action.choices = [('', 'Selecione a movimentação')] + [
+        (action, label.capitalize()) for action, (_, field, label) in FLOW_CORRECTIONS.items()
+        if getattr(order, field + '_date') or getattr(order, field + '_at')
+    ]
     return render_template('order.html',order=order,related_order=linked_order(order),status_form=status_form,flow_form=flow_form,item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
 
 def record_status(order,target,day=None,reference=''):
@@ -423,16 +441,33 @@ def record_status(order,target,day=None,reference=''):
 @login_required
 def order_flow(ident):
     order=get_order(ident);form=FlowForm()
-    if current_user.role=='admin':
-        form.action.choices += [('clear_approval','Remover aprovação'),('clear_invoice','Remover faturamento'),('clear_received','Remover recebimento')]
+    if current_user.role == 'admin':
+        configure_flow_correction(form)
     if not form.validate_on_submit():abort(400,description='Confira a etapa selecionada.')
     mutable(order)
     action=form.action.data;reference=(form.reference.data or '').strip()
-    if action.startswith('clear_'):
-        if current_user.role!='admin':abort(403)
-        field={'clear_approval':'approved','clear_invoice':'invoiced','clear_received':'received'}[action]
-        setattr(order,field+'_date',None);setattr(order,field+'_at',None)
-        event(order,f'Registro {field} removido.'+(f' Observação: {reference}' if reference else ''))
+    if action in FLOW_CORRECTIONS:
+        if current_user.role != 'admin':
+            abort(403)
+        removed_status, field, label = FLOW_CORRECTIONS[action]
+        corrected_status = form.corrected_status.data
+        previous = order.status
+        if (corrected_status or previous) == removed_status:
+            flash('Selecione o status correto para desfazer a movimentação atual.', 'error')
+            return redirect(url_for('web.order_detail', ident=ident))
+        date_field, time_field = field + '_date', field + '_at'
+        if not (getattr(order, date_field) or getattr(order, time_field)):
+            flash('Essa movimentação já está sem registro.', 'error')
+            return redirect(url_for('web.order_detail', ident=ident))
+        setattr(order, date_field, None)
+        setattr(order, time_field, None)
+        change = ''
+        if corrected_status and corrected_status != previous:
+            order.status = corrected_status
+            order.status_changed_at = utcnow()
+            change = f' Status corrigido: {previous} → {corrected_status}.'
+        event(order, f'Movimentação corrigida: registro de {label} removido.' + change
+              + (f' Observação: {reference}' if reference else ''))
     else:
         target={'approve':'Aprovado','invoice':'Faturado','receive':'Recebido'}[action]
         record_status(order,target,form.action_date.data,reference)

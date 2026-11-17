@@ -73,6 +73,7 @@ class FlowForm(FlaskForm):
         ('invoice', 'Registrar faturamento'),
         ('receive', 'Confirmar recebimento integral'),
     ])
+    corrected_status = SelectField('Status correto', choices=[('', 'Manter status atual')], validators=[Optional()])
     action_date = DateField('Data da etapa (vazio = hoje)', validators=[Optional()])
     reference = StringField('Referência / observação (opcional)', validators=[Optional(), Length(max=300)])
     version = HiddenField()
