@@ -407,7 +407,39 @@ FLOW_CORRECTIONS = {
 }
 
 
+ROLLBACK_FLOW = ('rollback_flow', 'Voltar o fluxo e limpar as etapas seguintes')
+
+
+def rollback_order_flow(order, target, reference):
+    if not target or target == 'Cancelada':
+        flash('Selecione o status para o qual deseja voltar.', 'error')
+        return False
+
+    target_index = STATUSES.index(target)
+    removed = []
+    for status, field, label in FLOW_CORRECTIONS.values():
+        if STATUSES.index(status) <= target_index:
+            continue
+        if getattr(order, field + '_date') or getattr(order, field + '_at'):
+            setattr(order, field + '_date', None)
+            setattr(order, field + '_at', None)
+            removed.append(label)
+
+    if target != order.status:
+        previous = order.status
+        order.status = target
+        order.status_changed_at = utcnow()
+        message = f'Fluxo corrigido: {previous} → {target}.'
+    else:
+        message = f'Fluxo corrigido a partir de {target}.'
+    if removed:
+        message += ' Etapas limpas: ' + ', '.join(removed) + '.'
+    event(order, message + (f' Observação: {reference}' if reference else ''))
+    return True
+
+
 def configure_flow_correction(form):
+    form.action.choices.append(ROLLBACK_FLOW)
     form.action.choices += [(action, label.capitalize()) for action, (_, _, label) in FLOW_CORRECTIONS.items()]
     form.corrected_status.choices = [('', 'Manter status atual')] + [(status, status) for status in STATUSES]
 
@@ -419,7 +451,7 @@ def order_detail(ident):
     status_form=StatusForm(status=order.status,version=str(order.version),delivered_date=order.delivered_date or today());status_form.status.choices=[(x,x) for x in STATUSES]
     flow_form = FlowForm(version=str(order.version))
     configure_flow_correction(flow_form)
-    flow_form.action.choices = [('', 'Selecione a movimentação')] + [
+    flow_form.action.choices = [('', 'Selecione a correção'), ROLLBACK_FLOW] + [
         (action, label.capitalize()) for action, (_, field, label) in FLOW_CORRECTIONS.items()
         if getattr(order, field + '_date') or getattr(order, field + '_at')
     ]
@@ -446,7 +478,12 @@ def order_flow(ident):
     if not form.validate_on_submit():abort(400,description='Confira a etapa selecionada.')
     mutable(order)
     action=form.action.data;reference=(form.reference.data or '').strip()
-    if action in FLOW_CORRECTIONS:
+    if action == ROLLBACK_FLOW[0]:
+        if current_user.role != 'admin':
+            abort(403)
+        if not rollback_order_flow(order, form.corrected_status.data, reference):
+            return redirect(url_for('web.order_detail', ident=ident))
+    elif action in FLOW_CORRECTIONS:
         if current_user.role != 'admin':
             abort(403)
         removed_status, field, label = FLOW_CORRECTIONS[action]

@@ -24,7 +24,7 @@
 {% if current_user.role == 'admin' and flow_form.action.choices|length > 1 %}
 <details class="flow-editor">
   <summary>Corrigir movimentação</summary>
-  <p class="flow-help">Selecione o registro lançado por engano. Se ele for o status atual, selecione também para qual status a OS deve voltar.</p>
+  <p class="flow-help">Para limpar várias etapas, escolha Voltar o fluxo e indique o Status correto. As datas e os horários das etapas seguintes serão removidos. Para corrigir uma única movimentação, selecione o registro correspondente.</p>
   <form method="post" action="{{ url_for('web.order_flow',ident=order.id) }}">
     {{ flow_form.hidden_tag() }}
     <div class="form-grid">{{ field(flow_form.action) }}{{ field(flow_form.corrected_status) }}{{ field(flow_form.reference) }}</div>
