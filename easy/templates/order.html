@@ -20,18 +20,19 @@
 </section>
 <section class="panel"><div class="heading small"><h2>{{ order.plate or 'Não informada' }} · {{ order.model or 'Modelo não informado' }}</h2><div>{{ badge(order) }}</div></div><div class="facts"><div><label>Cliente</label><b>{{ order.client.name }}</b></div><div><label>Frota</label>{{ order.fleet or '—' }}</div><div><label>Quilometragem</label>{{ (order.mileage|string ~ ' km') if order.mileage is not none else 'Não informada' }}</div><div><label>Entrada</label>{{ order.entered_at|localtime if order.entered_at else order.entry_date|datebr }}</div><div><label>Saída</label>{{ order.delivered_at|localtime if order.delivered_at else 'Não registrada' }}</div><div><label>Previsão de entrega</label>{{ order.due_date|datebr }}</div><div><label>Responsável</label>{{ order.responsible }}</div></div><div class="description"><label>Problema relatado</label><p>{{ order.problem }}</p>{% if order.diagnosis %}<label>Diagnóstico</label><p>{{ order.diagnosis }}</p>{% endif %}{% if order.notes %}<label>Observações</label><p>{{ order.notes }}</p>{% endif %}</div>
 {% if order.cover_key %}<figure class="order-cover-figure"><img class="order-cover-preview" src="{{ url_for('web.order_cover',ident=order.id,v=order.cover_key) }}" alt="Foto principal do veículo"><figcaption>Foto principal do veículo</figcaption></figure>{% endif %}
-<section class="flow-detail" aria-labelledby="flow-title"><div class="heading small"><h2 id="flow-title">Fluxo do atendimento</h2><span>{{ order.flow_label }}</span></div>{{ legend() }}{{ timeline(order) }}<form method="post" action="{{ url_for('web.order_status',ident=order.id) }}">{{ status_form.hidden_tag() }}<div class="form-grid">{{ field(status_form.status) }}</div><button class="button">Atualizar fluxo</button></form><p class="flow-help">Escolha qualquer etapa. Data, horário e responsável pelo movimento são registrados automaticamente.</p>
-{% if current_user.role == 'admin' and flow_form.action.choices|length > 1 %}
-<details class="flow-editor">
-  <summary>Corrigir movimentação</summary>
-  <p class="flow-help">Para limpar várias etapas, escolha Voltar o fluxo e indique o Status correto. As datas e os horários das etapas seguintes serão removidos. Para corrigir uma única movimentação, selecione o registro correspondente.</p>
-  <form method="post" action="{{ url_for('web.order_flow',ident=order.id) }}">
-    {{ flow_form.hidden_tag() }}
-    <div class="form-grid">{{ field(flow_form.action) }}{{ field(flow_form.corrected_status) }}{{ field(flow_form.reference) }}</div>
-    <button class="button">Salvar correção</button>
+<section class="flow-detail" aria-labelledby="flow-title">
+  <div class="heading small">
+    <h2 id="flow-title">Fluxo do atendimento</h2>
+    <span>{{ order.flow_label }}{% if order.flow_status_date %} · {{ order.flow_status_date|datebr }}{% endif %}</span>
+  </div>
+  {{ legend() }}{{ timeline(order) }}
+  {% if current_user.role == 'admin' %}
+  <form method="post" action="{{ url_for('web.order_status',ident=order.id) }}">
+    {{ status_form.hidden_tag() }}
+    <div class="form-grid">{{ field(status_form.status) }}{{ field(status_form.status_date) }}</div>
+    <button class="button">Salvar status</button>
   </form>
-</details>
-{% endif %}
+  {% endif %}
 </section>
 <div class="tabs" role="tablist" aria-label="Informações da OS"><button class="tab active" id="tab-check" role="tab" aria-selected="true" aria-controls="check-panel" data-tab="check-panel">Checklist</button><button class="tab" id="tab-items" role="tab" aria-selected="false" aria-controls="items-panel" data-tab="items-panel">Serviços e peças</button><button class="tab" id="tab-photos" role="tab" aria-selected="false" aria-controls="photos-panel" data-tab="photos-panel">Fotos</button><button class="tab" id="tab-delivery" role="tab" aria-selected="false" aria-controls="delivery-panel" data-tab="delivery-panel">Entrega</button><button class="tab" id="tab-history" role="tab" aria-selected="false" aria-controls="history-panel" data-tab="history-panel">Histórico</button></div>
 <div id="check-panel" role="tabpanel" aria-labelledby="tab-check" data-panel><h2>Checklist de entrada</h2><form method="post" action="{{ url_for('web.checklist',ident=order.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ order.version }}"><input type="hidden" name="stage" value="entrada"><fieldset>{% for c in order.checks if c.stage=='entrada' %}<div class="check-row"><label for="result_{{ c.id }}">{{ c.label }}</label><select class="input" id="result_{{ c.id }}" name="result_{{ c.id }}">{% for key,label in [('pendente','Pendente'),('ok','OK'),('avaria','Atenção / avaria'),('na','Não se aplica')] %}<option value="{{ key }}" {{ 'selected' if c.result==key }}>{{ label }}</option>{% endfor %}</select><input class="input" name="notes_{{ c.id }}" value="{{ c.notes or '' }}" maxlength="500" placeholder="Observação / descrição da avaria" aria-label="Observação de {{ c.label }}"></div>{% endfor %}<button class="button">Salvar checklist de entrada</button></fieldset></form></div>

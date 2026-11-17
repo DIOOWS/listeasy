@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
@@ -6,6 +7,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 STATUSES = ['Aguardando avaliação', 'Aguardando aprovação', 'Aprovado', 'Aguardando peças', 'Em serviço', 'Pronto para entrega', 'Entregue', 'Faturado', 'Recebido', 'Cancelada']
+STATUS_MOVEMENTS = {
+    'Aprovado': 'approved', 'Em serviço': 'started', 'Pronto para entrega': 'ready',
+    'Entregue': 'delivered', 'Faturado': 'invoiced', 'Recebido': 'received',
+}
+WORKSHOP_ZONE = ZoneInfo('America/Sao_Paulo')
 ENTRY_CHECKS = ['Quilometragem registrada', 'Pneus e rodas', 'Lataria e avarias', 'Luzes e sinalização', 'Acessórios e documentos', 'Estado interno do veículo']
 EXIT_CHECKS = ['Serviços executados e conferidos', 'Funcionamento testado', 'Veículo liberado pelo responsável']
 
@@ -139,6 +145,17 @@ class Order(db.Model):
         return round(100 * sum(x.done for x in services) / len(services)) if services else 0
 
     @property
+    def flow_status_date(self):
+        movement = STATUS_MOVEMENTS.get(self.status)
+        if movement:
+            day = getattr(self, movement + '_date')
+            if day:
+                return day
+        if self.status_changed_at:
+            return self.status_changed_at.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE).date()
+        return self.entry_date
+
+    @property
     def flow_steps(self):
         steps=[
             ('Entrada',self.entry_date,self.entered_at,True),
@@ -152,7 +169,7 @@ class Order(db.Model):
         current={'Aguardando avaliação':0,'Aguardando aprovação':1,'Aprovado':1,
                  'Aguardando peças':2,'Em serviço':2,'Pronto para entrega':3,
                  'Entregue':4,'Faturado':5,'Recebido':6}.get(self.status)
-        return [dict(label=label,date=day,timestamp=(self.status_changed_at if index == current and self.status in
+        return [dict(label=label,date=self.flow_status_date if index == current else day,timestamp=(self.status_changed_at if index == current and self.status in
                            ('Aguardando avaliação', 'Aguardando aprovação', 'Aguardando peças') else stamp),
                      state='current' if index==current else 'done' if done else 'pending')
                 for index,(label,day,stamp,done) in enumerate(steps)]

@@ -1,7 +1,7 @@
 import csv
 import io
 import re
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from urllib.parse import urlsplit
@@ -11,7 +11,7 @@ from sqlalchemy import or_, func, case
 from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db, limiter, today
-from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, ENTRY_CHECKS, EXIT_CHECKS, utcnow
+from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, STATUS_MOVEMENTS, WORKSHOP_ZONE, ENTRY_CHECKS, EXIT_CHECKS, utcnow
 from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm, ServiceForm
 
 from .media import configure_photos, prepare_image, save_image, serve_image
@@ -410,11 +410,7 @@ FLOW_CORRECTIONS = {
 ROLLBACK_FLOW = ('rollback_flow', 'Voltar o fluxo e limpar as etapas seguintes')
 
 
-def rollback_order_flow(order, target, reference):
-    if not target or target == 'Cancelada':
-        flash('Selecione o status para o qual deseja voltar.', 'error')
-        return False
-
+def clear_later_movements(order, target):
     target_index = STATUSES.index(target)
     removed = []
     for status, field, label in FLOW_CORRECTIONS.values():
@@ -424,6 +420,37 @@ def rollback_order_flow(order, target, reference):
             setattr(order, field + '_date', None)
             setattr(order, field + '_at', None)
             removed.append(label)
+
+    return removed
+
+
+def save_exact_status(order, target, day):
+    previous = order.status
+    stamp = utcnow()
+    movement = STATUS_MOVEMENTS.get(target)
+    # Cancellation is independent of the operational timeline.
+    removed = clear_later_movements(order, target) if target != 'Cancelada' else []
+    order.status = target
+    if movement:
+        setattr(order, movement + '_date', day)
+        setattr(order, movement + '_at', stamp)
+        order.status_changed_at = stamp
+    else:
+        local_stamp = stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
+        effective_stamp = datetime.combine(day, local_stamp.time(), tzinfo=WORKSHOP_ZONE)
+        order.status_changed_at = effective_stamp.astimezone(timezone.utc).replace(tzinfo=None)
+    message = f'Fluxo atualizado: {previous} → {target}. Data do status: {day:%d/%m/%Y}.'
+    if removed:
+        message += ' Etapas limpas: ' + ', '.join(removed) + '.'
+    event(order, message)
+
+
+def rollback_order_flow(order, target, reference):
+    if not target or target == 'Cancelada':
+        flash('Selecione o status para o qual deseja voltar.', 'error')
+        return False
+
+    removed = clear_later_movements(order, target)
 
     if target != order.status:
         previous = order.status
@@ -448,21 +475,13 @@ def configure_flow_correction(form):
 @login_required
 def order_detail(ident):
     order=get_order(ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user)])
-    status_form=StatusForm(status=order.status,version=str(order.version),delivered_date=order.delivered_date or today());status_form.status.choices=[(x,x) for x in STATUSES]
-    flow_form = FlowForm(version=str(order.version))
-    configure_flow_correction(flow_form)
-    flow_form.action.choices = [('', 'Selecione a correção'), ROLLBACK_FLOW] + [
-        (action, label.capitalize()) for action, (_, field, label) in FLOW_CORRECTIONS.items()
-        if getattr(order, field + '_date') or getattr(order, field + '_at')
-    ]
-    return render_template('order.html',order=order,related_order=linked_order(order),status_form=status_form,flow_form=flow_form,item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
+    status_form=StatusForm(status=order.status,status_date=order.flow_status_date or today(),version=str(order.version),delivered_date=order.delivered_date or today());status_form.status.choices=[(x,x) for x in STATUSES]
+    return render_template('order.html',order=order,related_order=linked_order(order),status_form=status_form,item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
 
 def record_status(order,target,day=None,reference=''):
     stamp=utcnow();day=day or today();previous=order.status
-    fields={'Aprovado':'approved','Em serviço':'started','Pronto para entrega':'ready',
-            'Entregue':'delivered','Faturado':'invoiced','Recebido':'received'}
     if target=='Aguardando avaliação':order.entered_at=stamp
-    prefix=fields.get(target)
+    prefix=STATUS_MOVEMENTS.get(target)
     if prefix:
         setattr(order,prefix+'_date',day);setattr(order,prefix+'_at',stamp)
     # Preserve other movement records. A selection never clears another step.
@@ -518,8 +537,16 @@ def order_status(ident):
     if not form.validate_on_submit():abort(400,description='Confira o status selecionado.')
     mutable(order)
     target=form.status.data
-    day=form.delivered_date.data if target=='Entregue' else None
-    record_status(order,target,day)
+    if 'status_date' in request.form:
+        if current_user.role != 'admin':
+            abort(403)
+        if not form.status_date.data:
+            flash('Selecione a data do status.', 'error')
+            return redirect(url_for('web.order_detail', ident=ident))
+        save_exact_status(order, target, form.status_date.data)
+    else:
+        day=form.delivered_date.data if target=='Entregue' else None
+        record_status(order,target,day)
     db.session.commit();flash('Fluxo atualizado.','success')
     return redirect(url_for('web.order_detail',ident=ident))
 

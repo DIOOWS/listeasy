@@ -57,7 +57,8 @@ class ServiceForm(FlaskForm):
     version = HiddenField()
 
 class StatusForm(FlaskForm):
-    status = SelectField('Etapa do fluxo')
+    status = SelectField('Status')
+    status_date = DateField('Data do status', validators=[Optional()], render_kw={'required': True})
     delivered_date = DateField('Data real da entrega (vazio = hoje)', validators=[Optional()])
     version = HiddenField()
 
