@@ -107,15 +107,62 @@
     order.querySelector('summary').focus();
   }
 
+  const photoDialog = document.getElementById('tv-photo-dialog');
+  const photoImage = photoDialog.querySelector('.tv-photo-full');
+  const photoCaption = photoDialog.querySelector('.tv-photo-caption');
+  const photoPrevious = photoDialog.querySelector('.tv-photo-prev');
+  const photoNext = photoDialog.querySelector('.tv-photo-next');
+  let gallery = [];
+  let photoIndex = 0;
+
+  function showPhoto() {
+    const link = gallery[photoIndex];
+    photoImage.src = link.href;
+    photoImage.alt = link.dataset.tvPhoto;
+    photoCaption.textContent = `${photoIndex + 1} de ${gallery.length} · ${link.dataset.tvPhoto}`;
+    photoPrevious.hidden = photoNext.hidden = gallery.length < 2;
+  }
+
+  function stepPhoto(offset) {
+    if (gallery.length < 2) return;
+    photoIndex = (photoIndex + offset + gallery.length) % gallery.length;
+    showPhoto();
+  }
+
+  photoPrevious.addEventListener('click', () => stepPhoto(-1));
+  photoNext.addEventListener('click', () => stepPhoto(1));
+  photoDialog.addEventListener('click', event => {
+    if (event.target === photoDialog || event.target.closest('.tv-photo-close')) {
+      photoDialog.close();
+    }
+  });
+  photoDialog.addEventListener('close', () => {
+    photoImage.removeAttribute('src');
+    gallery = [];
+  });
+
   cards.addEventListener('click', event => {
     const button = event.target.closest('[data-close-order]');
     if (button) {
       closeOrder(button.closest('.tv-card'));
       return;
     }
-
+    const link = event.target.closest('[data-tv-photo]');
+    if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    gallery = Array.from(link.closest('.tv-card').querySelectorAll('[data-tv-photo]'));
+    photoIndex = gallery.indexOf(link);
+    showPhoto();
+    photoDialog.showModal();
   });
   document.addEventListener('keydown', event => {
+    if (photoDialog.open) {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        stepPhoto(event.key === 'ArrowLeft' ? -1 : 1);
+      }
+      return;
+    }
     const order = expanded();
     if (event.key === 'Escape' && order) {
       event.preventDefault();

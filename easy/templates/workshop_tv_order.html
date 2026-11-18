@@ -25,7 +25,7 @@
   {% if order.cover_key %}
   {% set cover_url = url_for('web.order_cover',ident=order.id,v=order.cover_key) %}
   <figure class="tv-detail-photo">
-    <a href="{{ cover_url }}" target="_blank" rel="noopener" aria-label="Abrir foto do veículo em tamanho original">
+    <a href="{{ cover_url }}" data-tv-photo="Foto principal do veículo" aria-label="Ampliar foto principal do veículo">
       <img src="{{ cover_url }}" alt="Foto de {{ order.model or order.plate or 'veículo em manutenção' }}" loading="lazy" decoding="async">
     </a>
     <figcaption>Foto principal do veículo</figcaption>
@@ -60,7 +60,14 @@
   </ul>
   {% if order.photos %}
     <h4>Fotos</h4>
-    <ul>{% for photo in order.photos %}<li><a href="{{ url_for('web.photo_view',ident=photo.id) }}" target="_blank" rel="noopener">{{ photo.caption or ('Foto ' ~ loop.index) }}</a></li>{% endfor %}</ul>
+    <div class="tv-photo-thumbs">
+      {% for photo in order.photos %}
+        {% set label = photo.caption or ('Foto ' ~ loop.index) %}
+        <a href="{{ url_for('web.photo_view',ident=photo.id) }}" data-tv-photo="{{ label }}">
+          <img src="{{ url_for('web.photo_view',ident=photo.id) }}" alt="{{ label }}" loading="lazy" decoding="async">
+        </a>
+      {% endfor %}
+    </div>
   {% endif %}
 </section>
 </div>

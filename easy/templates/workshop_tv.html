@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel da Oficina · Modo TV</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=16) }}">
-<script src="{{ url_for('static',filename='workshop_tv.js',v=6) }}" defer></script>
+<link rel="stylesheet" href="{{ url_for('static',filename='workshop_tv.css',v=17) }}">
+<script src="{{ url_for('static',filename='workshop_tv.js',v=7) }}" defer></script>
 </head>
 <body class="{{ 'tv-admin' if current_user.role == 'admin' else 'tv-team' }}">
 <header class="tv-header">
@@ -38,5 +38,14 @@
   </nav>
   <noscript><p class="tv-noscript">Ative o JavaScript para acompanhar as OS em tempo real.</p></noscript>
 </main>
+<dialog id="tv-photo-dialog" aria-label="Galeria de fotos da OS">
+  <div class="tv-photo-frame">
+    <img class="tv-photo-full" alt="">
+    <button class="tv-photo-close" type="button" aria-label="Fechar galeria">×</button>
+    <button class="tv-photo-prev" type="button" aria-label="Foto anterior">←</button>
+    <button class="tv-photo-next" type="button" aria-label="Próxima foto">→</button>
+    <p class="tv-photo-caption" aria-live="polite"></p>
+  </div>
+</dialog>
 </body>
 </html>
