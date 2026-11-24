@@ -1,0 +1,11 @@
+<dialog id="flow-step-dialog" aria-labelledby="flow-step-title">
+  <div class="heading small"><h2 id="flow-step-title">Editar etapa</h2><button class="button secondary" type="button" data-close-flow>Fechar</button></div>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="version">
+    <div class="field"><label for="flow-step-action">Marcação</label><select class="input" id="flow-step-action" name="action"><option value="save">Registrar data</option><option value="clear">Neutro / apagar marcação</option></select></div>
+    <div class="field"><label for="flow-step-date">Data</label><input class="input" id="flow-step-date" type="date" name="date" data-today="{{ today.isoformat() }}" required></div>
+    <p class="muted">A alteração vale somente para esta bolinha.</p>
+    <button class="button" type="submit">Salvar etapa</button>
+  </form>
+</dialog>

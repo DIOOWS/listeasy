@@ -56,6 +56,15 @@ class ServiceForm(FlaskForm):
     responsible = StringField('Profissional responsável', validators=[Optional(), Length(max=120)], render_kw={'placeholder':'Nome do profissional'})
     version = HiddenField()
 
+class FlowStepForm(FlaskForm):
+    action = SelectField('Marcação', choices=[('save', 'Registrar data'), ('clear', 'Neutro / apagar marcação')])
+    date = DateField('Data', validators=[Optional()])
+    version = HiddenField()
+
+class FinalizedForm(FlaskForm):
+    finalized = BooleanField('Finalizado')
+    version = HiddenField()
+
 class StatusForm(FlaskForm):
     status = SelectField('Status')
     status_date = DateField('Data do status', validators=[Optional()], render_kw={'required': True})

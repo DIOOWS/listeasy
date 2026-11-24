@@ -68,3 +68,15 @@ body.navigating::before{content:'';position:fixed;top:0;left:0;width:35%;height:
   border-radius:6px;
   margin-bottom:16px;
 }
+
+/* Independent timeline controls retain the existing workshop layout. */
+.flow-step-button{display:inline-flex;align-items:center;justify-content:center;border:0;padding:8px;margin:-8px;background:transparent;color:inherit;cursor:pointer;font:inherit;border-radius:50%}
+.flow-step-button:focus-visible{outline:3px solid #1767b0;outline-offset:3px}
+.flow-step-button:hover .flow-dot{box-shadow:0 0 0 3px #1767b033}
+#flow-step-dialog{width:min(420px,calc(100vw - 32px));border:1px solid #cbd5e1;border-radius:14px;padding:22px}
+#flow-step-dialog::backdrop{background:#10243b88}
+#flow-step-dialog .field{margin-bottom:16px}
+.flow-finalized{display:flex;align-items:center;gap:10px;font-weight:700;margin-top:24px}
+.flow-finalized input{width:20px;height:20px}
+
+.flow-other-status{margin:18px 0}.flow-other-status>form{padding-top:16px}

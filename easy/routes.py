@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db, limiter, today
 from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, STATUS_MOVEMENTS, WORKSHOP_ZONE, ENTRY_CHECKS, EXIT_CHECKS, utcnow
-from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, PhotoEditForm, UserForm, FlowForm, ServiceForm
+from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, PhotoEditForm, UserForm, FlowForm, ServiceForm, FlowStepForm, FinalizedForm
 
 from .media import configure_photos, image_public_id, prepare_image, save_image, serve_image
 
@@ -137,8 +137,8 @@ def logout():
 def dashboard():
     if current_user.role == 'equipe':
         return redirect(url_for('web.workshop_tv'))
-    active=Order.deleted_at.is_(None) & ~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada'])
-    pending_finance=Order.deleted_at.is_(None) & Order.status.in_(['Entregue','Faturado']) & Order.received_date.is_(None)
+    active=Order.deleted_at.is_(None) & Order.finalized.is_(False)
+    pending_finance=Order.deleted_at.is_(None) & or_(Order.delivered_date.is_not(None),Order.invoiced_date.is_not(None)) & Order.received_date.is_(None)
     day=today()
     totals=db.session.execute(db.select(
         func.count(case((active,1))),
@@ -147,7 +147,7 @@ def dashboard():
         func.count(case((pending_finance,1))))).one()
     counts=dict(zip(['open','today','late'],totals[:3]))
     finance_count=totals[3]
-    orders=db.session.scalars(db.select(Order).where(or_(active,pending_finance)).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items)).order_by(active.desc(),Order.due_date.asc().nulls_last(),Order.id).limit(12)).all()
+    orders=db.session.scalars(db.select(Order).where(active).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items)).order_by(active.desc(),Order.due_date.asc().nulls_last(),Order.id).limit(12)).all()
     return render_template('dashboard.html',orders=orders,counts=counts,finance_count=finance_count)
 
 @web.get('/modo-tv')
@@ -166,7 +166,7 @@ def tv_deadline(order):
 @login_required
 def workshop_tv_data():
     day=today()
-    active=Order.deleted_at.is_(None) & ~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada'])
+    active=Order.deleted_at.is_(None) & Order.finalized.is_(False)
     orders=db.session.scalars(db.select(Order).where(active)
         .options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),
             selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user))
@@ -249,11 +249,15 @@ def filtered_orders():
     query=db.select(Order).where(Order.deleted_at.is_(None)).outerjoin(Vehicle).join(Client,Order.client_id==Client.id).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items))
     q=request.args.get('q','').strip()[:150];status=request.args.get('status','')
     if q:query=query.where(or_(Order.number.ilike('%'+q+'%'),func.coalesce(Order.vehicle_plate,Vehicle.plate).ilike('%'+q+'%'),func.coalesce(Order.vehicle_fleet,Vehicle.fleet).ilike('%'+q+'%'),Client.name.ilike('%'+q+'%')))
-    if status in STATUSES:query=query.where(Order.status==status)
-    if request.args.get('open')=='1':query=query.where(~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada']))
-    if request.args.get('finance')=='1':query=query.where(Order.status.in_(['Entregue','Faturado']),Order.received_date.is_(None))
-    if request.args.get('due')=='today':query=query.where(Order.due_date==today(),~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada']))
-    if request.args.get('due')=='late':query=query.where(Order.due_date<today(),~Order.status.in_(['Entregue','Faturado','Recebido','Cancelada']))
+    if status in ('Faturado', 'Recebido'):
+        field = Order.invoiced_date if status == 'Faturado' else Order.received_date
+        query = query.where(or_(field.is_not(None), Order.status == status))
+    elif status in STATUSES:
+        query = query.where(Order.status == status)
+    if request.args.get('open')=='1':query=query.where(Order.finalized.is_(False))
+    if request.args.get('finance')=='1':query=query.where(or_(Order.delivered_date.is_not(None),Order.invoiced_date.is_not(None)),Order.received_date.is_(None))
+    if request.args.get('due')=='today':query=query.where(Order.due_date==today(),Order.finalized.is_(False))
+    if request.args.get('due')=='late':query=query.where(Order.due_date<today(),Order.finalized.is_(False))
     for key,operator in [('start',lambda d:Order.entry_date>=d),('end',lambda d:Order.entry_date<=d)]:
         raw=request.args.get(key)
         if raw:
@@ -429,7 +433,7 @@ def save_exact_status(order, target, day):
     stamp = utcnow()
     movement = STATUS_MOVEMENTS.get(target)
     # Cancellation is independent of the operational timeline.
-    removed = clear_later_movements(order, target) if target != 'Cancelada' else []
+    removed = []  # Updating one status must preserve independent milestones.
     order.status = target
     if movement:
         setattr(order, movement + '_date', day)
@@ -450,7 +454,7 @@ def rollback_order_flow(order, target, reference):
         flash('Selecione o status para o qual deseja voltar.', 'error')
         return False
 
-    removed = clear_later_movements(order, target)
+    removed = []
 
     if target != order.status:
         previous = order.status
@@ -475,8 +479,8 @@ def configure_flow_correction(form):
 @login_required
 def order_detail(ident):
     order=get_order(ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user)])
-    status_form=StatusForm(status=order.status,status_date=order.flow_status_date or today(),version=str(order.version),delivered_date=order.delivered_date or today());status_form.status.choices=[(x,x) for x in STATUSES]
-    return render_template('order.html',order=order,related_order=linked_order(order),status_form=status_form,item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
+    status_form=StatusForm(status=order.status,status_date=order.flow_status_date or today(),version=str(order.version),delivered_date=order.delivered_date or today());status_form.status.choices=[(x,x) for x in STATUSES if x not in ('Faturado','Recebido')]
+    return render_template('order.html',order=order,related_order=linked_order(order),status_form=status_form,finalized_form=FinalizedForm(finalized=order.finalized,version=str(order.version)),item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
 
 def record_status(order,target,day=None,reference=''):
     stamp=utcnow();day=day or today();previous=order.status
@@ -529,6 +533,75 @@ def order_flow(ident):
         record_status(order,target,form.action_date.data,reference)
     db.session.commit();flash('Fluxo atualizado.','success')
     return redirect(url_for('web.order_detail',ident=ident))
+
+FLOW_STEPS = {
+    'entry': ('Entrada', 'entry_date', 'entered_at', 'Aguardando avaliação'),
+    'approved': ('Aprovação', 'approved_date', 'approved_at', 'Aprovado'),
+    'started': ('Em serviço', 'started_date', 'started_at', 'Em serviço'),
+    'ready': ('Pronto', 'ready_date', 'ready_at', 'Pronto para entrega'),
+    'delivered': ('Entregue', 'delivered_date', 'delivered_at', 'Entregue'),
+    'invoiced': ('Faturado', 'invoiced_date', 'invoiced_at', None),
+    'received': ('Recebido', 'received_date', 'received_at', None),
+}
+
+
+@web.post('/ordens/<int:ident>/etapas/<step>')
+@admin_required
+def order_step(ident, step):
+    if step not in FLOW_STEPS:
+        abort(404)
+    order = get_order(ident)
+    form = FlowStepForm()
+    if not form.validate_on_submit() or (form.action.data == 'save' and not form.date.data):
+        abort(400, description='Selecione uma data válida ou a opção Neutro.')
+    mutable(order)
+    label, date_field, time_field, status = FLOW_STEPS[step]
+    old_day = getattr(order, date_field)
+    # Match the requested date while preserving an existing recorded local time.
+    stamp = getattr(order, time_field) or utcnow()
+    if form.action.data == 'clear':
+        setattr(order, date_field, None)
+        setattr(order, time_field, None)
+        message = f'Etapa {label}: marcação apagada (neutro).'
+    else:
+        # Entry date is also used by the order's existing date constraint.
+        if step == 'entry' and order.due_date and form.date.data > order.due_date:
+            abort(400, description='A entrada não pode ser posterior ao prazo de entrega.')
+        local = stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
+        effective = datetime.combine(form.date.data, local.time(), tzinfo=WORKSHOP_ZONE)
+        setattr(order, date_field, form.date.data)
+        setattr(order, time_field, effective.astimezone(timezone.utc).replace(tzinfo=None))
+        message = f'Etapa {label}: data definida para {form.date.data:%d/%m/%Y}.'
+    if status or order.status in ('Faturado', 'Recebido'):
+        # Operational progress depends on marked workshop steps, never finance.
+        remaining = [(target, getattr(order, time))
+                     for _, day, time, target in FLOW_STEPS.values()
+                     if target and (getattr(order, day) or getattr(order, time))]
+        order.status = remaining[-1][0] if remaining else 'Aguardando avaliação'
+        order.status_changed_at = (remaining[-1][1] if remaining else None) or utcnow()
+    if old_day:
+        message += f' Data anterior: {old_day:%d/%m/%Y}.'
+    event(order, message)
+    db.session.commit()
+    flash('Etapa atualizada.', 'success')
+    return redirect(url_for('web.order_detail', ident=ident))
+
+
+@web.post('/ordens/<int:ident>/finalizado')
+@admin_required
+def order_finalize(ident):
+    order = get_order(ident)
+    form = FinalizedForm()
+    if not form.validate_on_submit():
+        abort(400)
+    mutable(order)
+    order.finalized = form.finalized.data
+    event(order, 'Atendimento finalizado: removido do painel.' if order.finalized
+          else 'Atendimento reaberto: voltou ao painel.')
+    db.session.commit()
+    flash('Finalização atualizada.', 'success')
+    return redirect(url_for('web.order_detail', ident=ident))
+
 
 @web.post('/ordens/<int:ident>/status')
 @login_required

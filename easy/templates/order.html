@@ -27,10 +27,19 @@
   </div>
   {{ legend() }}{{ timeline(order) }}
   {% if current_user.role == 'admin' %}
-  <form method="post" action="{{ url_for('web.order_status',ident=order.id) }}">
-    {{ status_form.hidden_tag() }}
-    <div class="form-grid">{{ field(status_form.status) }}{{ field(status_form.status_date) }}</div>
-    <button class="button">Salvar status</button>
+  <p class="muted">Clique em uma bolinha para definir a data ou apagar somente aquela marcação.</p>
+  <details class="flow-other-status"><summary>Outras situações do atendimento</summary>
+    <form method="post" action="{{ url_for('web.order_status',ident=order.id) }}">
+      {{ status_form.hidden_tag() }}
+      <div class="form-grid">{{ field(status_form.status) }}{{ field(status_form.status_date) }}</div>
+      <button class="button secondary" type="submit">Salvar situação</button>
+    </form>
+  </details>
+  <form method="post" action="{{ url_for('web.order_finalize',ident=order.id) }}">
+    {{ finalized_form.hidden_tag() }}
+    <label class="flow-finalized">{{ finalized_form.finalized() }} Finalizado</label>
+    <p class="muted">Marque para retirar esta OS do painel. Desmarque para mostrar novamente.</p>
+    <button class="button" type="submit">Salvar finalização</button>
   </form>
   {% endif %}
 </section>

@@ -95,6 +95,7 @@ class Order(db.Model):
     invoiced_at = db.Column(db.DateTime)
     received_at = db.Column(db.DateTime)
     status_changed_at = db.Column(db.DateTime)
+    finalized = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false(), index=True)
     mileage = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(40), nullable=False, default=STATUSES[0], index=True)
     responsible = db.Column(db.String(120), nullable=False)
@@ -138,7 +139,7 @@ class Order(db.Model):
         return (self.subtotal() - self.discount).quantize(Decimal('0.01'))
     @property
     def closed(self):
-        return self.status in ['Entregue', 'Faturado', 'Recebido', 'Cancelada']
+        return bool(self.finalized)
     @property
     def service_progress(self):
         services = [x for x in self.items if x.kind == 'servico']
@@ -157,22 +158,20 @@ class Order(db.Model):
 
     @property
     def flow_steps(self):
-        steps=[
-            ('Entrada',self.entry_date,self.entered_at,True),
-            ('Aprovação',self.approved_date,self.approved_at,bool(self.approved_date or self.approved_at)),
-            ('Em serviço',self.started_date,self.started_at,bool(self.started_date or self.started_at)),
-            ('Pronto',self.ready_date,self.ready_at,bool(self.ready_date or self.ready_at)),
-            ('Entregue',self.delivered_date,self.delivered_at,bool(self.delivered_date or self.delivered_at)),
-            ('Faturado',self.invoiced_date,self.invoiced_at,bool(self.invoiced_date or self.invoiced_at)),
-            ('Recebido',self.received_date,self.received_at,bool(self.received_date or self.received_at))]
-        # The selected status is the current step. No later step implies earlier ones.
-        current={'Aguardando avaliação':0,'Aguardando aprovação':1,'Aprovado':1,
-                 'Aguardando peças':2,'Em serviço':2,'Pronto para entrega':3,
-                 'Entregue':4,'Faturado':5,'Recebido':6}.get(self.status)
-        return [dict(label=label,date=self.flow_status_date if index == current else day,timestamp=(self.status_changed_at if index == current and self.status in
-                           ('Aguardando avaliação', 'Aguardando aprovação', 'Aguardando peças') else stamp),
-                     state='current' if index==current else 'done' if done else 'pending')
-                for index,(label,day,stamp,done) in enumerate(steps)]
+        steps = [
+            ('entry', 'Entrada', self.entry_date, self.entered_at),
+            ('approved', 'Aprovação', self.approved_date, self.approved_at),
+            ('started', 'Em serviço', self.started_date, self.started_at),
+            ('ready', 'Pronto', self.ready_date, self.ready_at),
+            ('delivered', 'Entregue', self.delivered_date, self.delivered_at),
+            ('invoiced', 'Faturado', self.invoiced_date, self.invoiced_at),
+            ('received', 'Recebido', self.received_date, self.received_at)]
+        current = {'Aprovado': 'approved', 'Em serviço': 'started',
+                   'Pronto para entrega': 'ready', 'Entregue': 'delivered',
+                   'Faturado': 'invoiced', 'Recebido': 'received'}.get(self.status)
+        return [dict(key=key, label=label, date=day, timestamp=stamp,
+                     state=('current' if key == current else 'done') if day or stamp else 'pending')
+                for key, label, day, stamp in steps]
 
     @property
     def flow_label(self):

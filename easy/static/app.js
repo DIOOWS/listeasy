@@ -157,6 +157,10 @@
  document.addEventListener('input',event=>{const form=event.target.closest('form');if(form)form.dataset.dirty='true';});
  document.addEventListener('change',event=>{
   const control=event.target;
+  if(control.id==='flow-step-action'){
+   const date=control.form.elements.date;
+   date.disabled=control.value==='clear';date.required=!date.disabled;
+  }
   if(control.matches('[data-show-password]')){const input=control.closest('form').querySelector('input[name=password]');if(input)input.type=control.checked?'text':'password';}
   const form=control.closest('form');if(form)form.dataset.dirty='true';
  });
@@ -164,6 +168,22 @@
   const target=event.target.closest('button,a,dialog');if(!target)return;
   if(target.matches('[data-confirm]')&&!confirm(target.dataset.confirm)){event.preventDefault();return;}
   if(target.matches('[data-tab]')){event.preventDefault();activate(target);return;}
+  const flowDialog=document.getElementById('flow-step-dialog');
+  if(target.matches('[data-flow-step]')&&flowDialog){
+   event.preventDefault();
+   const form=flowDialog.querySelector('form');form.reset();delete form.dataset.dirty;
+   form.querySelector('.request-message')?.remove();form.action=target.dataset.url;
+   form.elements.version.value=target.dataset.version;
+   const date=form.elements.date;date.disabled=false;date.required=true;
+   date.value=target.dataset.date||date.dataset.today;
+   flowDialog.querySelector('h2').textContent=target.dataset.label;
+   flowDialog.showModal();return;
+  }
+  if(target.matches('[data-close-flow]')){flowDialog?.close();return;}
+  if(flowDialog&&target===flowDialog){
+   const rect=flowDialog.getBoundingClientRect();
+   if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)flowDialog.close();return;
+  }
   const photoDialog=document.getElementById('photo-dialog');
   const photoLink=target.matches('[data-edit-photo]')?target.closest('figure').querySelector('[data-photo-dialog]'):target;
   if(photoDialog&&photoLink.matches('[data-photo-dialog]')&&event.button===0&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){
