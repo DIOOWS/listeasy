@@ -564,14 +564,23 @@ def checklist(ident):
     event(order,f'Checklist de {"entrada" if stage=="entrada" else "entrega"} atualizado.');db.session.commit()
     flash('Checklist salvo.','success');return redirect(url_for('web.order_detail',ident=ident))
 
+def service_title(value):
+    value = (value or '').strip()
+    return {'refrigeracao': 'Refrigeração', 'estrutura': 'Estrutura'}.get(value, value)
+
+
+def service_category(title):
+    return {'Refrigeração': 'refrigeracao', 'Estrutura': 'estrutura'}.get(title, 'personalizado')
+
+
 @web.post('/ordens/<int:ident>/servicos')
 @login_required
 def service_add(ident):
     order=get_order(ident);mutable(order);form=ServiceForm()
     if not form.validate_on_submit():
         abort(400,description='Confira o tipo de serviço, peças utilizadas e profissional responsável.')
-    service_type=form.service_type.data
-    title={'refrigeracao':'Refrigeração','estrutura':'Estrutura'}[service_type]
+    title = service_title(form.service_type.data)
+    service_type = service_category(title)
     item=Item(order=order,kind='servico',service_type=service_type,description=title,
               used_parts=(form.used_parts.data or '').strip(),responsible=(form.responsible.data or '').strip(),
               quantity=1,unit_price=Decimal('0'),done=False)
@@ -595,11 +604,13 @@ def item_edit(ident,item_id):
     if item.order_id!=ident:abort(404)
     if item.service_type:
         form=ServiceForm(obj=item)
-        if request.method=='GET':form.version.data=str(order.version)
+        if request.method == 'GET':
+            form.version.data = str(order.version)
+            form.service_type.data = item.description
         if form.validate_on_submit():
             mutable(order)
-            item.service_type=form.service_type.data
-            item.description={'refrigeracao':'Refrigeração','estrutura':'Estrutura'}[form.service_type.data]
+            item.description = service_title(form.service_type.data)
+            item.service_type = service_category(item.description)
             item.used_parts=(form.used_parts.data or '').strip()
             item.responsible=(form.responsible.data or '').strip()
             event(order,f'Serviço atualizado: {item.description}.');db.session.commit()

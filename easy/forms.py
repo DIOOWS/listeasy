@@ -51,7 +51,7 @@ class ItemForm(FlaskForm):
     version = HiddenField()
 
 class ServiceForm(FlaskForm):
-    service_type = SelectField('Tipo do serviço', choices=[('refrigeracao','Refrigeração'),('estrutura','Estrutura')])
+    service_type = StringField('Tipo do serviço', validators=[Optional(), Length(max=200)], render_kw={'placeholder': 'Escreva o serviço realizado'})
     used_parts = TextAreaField('Peças utilizadas', validators=[Optional(), Length(max=5000)], render_kw={'placeholder':'Escreva as peças utilizadas'})
     responsible = StringField('Profissional responsável', validators=[Optional(), Length(max=120)], render_kw={'placeholder':'Nome do profissional'})
     version = HiddenField()
