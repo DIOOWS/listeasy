@@ -5,11 +5,11 @@
 <form method="post"{% if source %} action="{{ url_for('web.order_new',vinculada_a=source.id) }}"{% endif %} enctype="multipart/form-data" class="panel os-form">{{ form.hidden_tag() }}
 <h2>Cliente e veículo</h2><p class="os-form-help">Somente o cliente é obrigatório. Preencha as demais informações quando estiverem disponíveis.</p>
 <div class="form-grid">{{ field(form.client_id) }}{{ field(form.plate) }}{{ field(form.model) }}{{ field(form.fleet) }}{{ field(form.mileage) }}</div>
-<h2>Foto do veículo</h2>
+<h2>Capa do veículo</h2><p class="muted">Uma imagem para os cards e o modo TV. As fotos do atendimento são adicionadas depois, na própria OS.</p>
 {% if order and order.cover_key %}<img class="order-cover-preview" src="{{ url_for('web.order_cover',ident=order.id,v=order.cover_key) }}" alt="Foto principal atual do veículo">{% endif %}
 <div class="form-grid">{{ field(form.cover_file) }}{% if order and order.cover_key %}{{ field(form.remove_cover) }}{% endif %}</div>
 <h2>Atendimento</h2><p class="os-form-help">A entrada registra o horário automaticamente ao salvar a OS.</p>
 {% if order %}<p class="os-form-help">A previsão de entrega aparece para o Administrador. O prazo da oficina aparece para a Equipe. Se ficar em branco, a Equipe verá a previsão de entrega.</p>{% endif %}
-<div class="form-grid">{{ field(form.number) }}{{ field(form.responsible) }}{{ field(form.entry_date) }}{{ field(form.due_date) }}{% if order %}{{ field(form.workshop_due_date) }}{% endif %}{{ field(form.problem) }}{{ field(form.diagnosis) }}{{ field(form.notes) }}</div>
+<div class="form-grid">{{ field(form.number) }}{{ field(form.responsible) }}{{ field(form.entry_date) }}{{ field(form.due_date) }}{{ field(form.workshop_due_date) }}{{ field(form.problem) }}{{ field(form.diagnosis) }}{{ field(form.notes) }}</div>
 <div class="actions"><button class="button">Salvar OS</button><a class="button secondary" href="{{ back }}">Cancelar</a></div>
 </form>{% endif %}{% endblock %}

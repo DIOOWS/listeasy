@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db, limiter, today
 from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, STATUS_MOVEMENTS, WORKSHOP_ZONE, ENTRY_CHECKS, EXIT_CHECKS, utcnow
-from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, PhotoEditForm, UserForm, FlowForm, ServiceForm, FlowStepForm, FinalizedForm
+from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, PhotoEditForm, UserForm, FlowForm, ServiceForm, FlowStepForm, FinalizedForm, CoverForm
 
 from .media import configure_photos, image_public_id, prepare_image, save_image, serve_image
 
@@ -132,23 +132,42 @@ def login():
 def logout():
     logout_user();session.clear();return redirect(url_for('web.login'))
 
+def active_workshop():
+    # Financial milestones never imply delivery. Explicit delivery/finalization does.
+    return (Order.deleted_at.is_(None) & Order.finalized.is_(False)
+            & Order.delivered_date.is_(None) & Order.delivered_at.is_(None)
+            & ~Order.status.in_(['Entregue', 'Cancelada']))
+
+
 @web.get('/')
 @login_required
 def dashboard():
     if current_user.role == 'equipe':
         return redirect(url_for('web.workshop_tv'))
-    active=Order.deleted_at.is_(None) & Order.finalized.is_(False)
-    pending_finance=Order.deleted_at.is_(None) & or_(Order.delivered_date.is_not(None),Order.invoiced_date.is_not(None)) & Order.received_date.is_(None)
-    day=today()
-    totals=db.session.execute(db.select(
-        func.count(case((active,1))),
-        func.count(case((active & (Order.due_date==day),1))),
-        func.count(case((active & (Order.due_date<day),1))),
-        func.count(case((pending_finance,1))))).one()
-    counts=dict(zip(['open','today','late'],totals[:3]))
-    finance_count=totals[3]
-    orders=db.session.scalars(db.select(Order).where(active).options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items)).order_by(active.desc(),Order.due_date.asc().nulls_last(),Order.id).limit(12)).all()
-    return render_template('dashboard.html',orders=orders,counts=counts,finance_count=finance_count)
+    active = active_workshop()
+    day = today()
+    ready = Order.workshop_status == 'Pronto para entrega'
+    view = request.args.get('view', '')
+    conditions = {'late': Order.due_date < day, 'today': Order.due_date == day, 'ready': ready}
+    condition = active & conditions[view] if view in conditions else active
+    q = request.args.get('q', '').strip()[:150]
+    if q:
+        condition = condition & or_(Order.number.ilike('%' + q + '%'),
+            func.coalesce(Order.vehicle_plate, Vehicle.plate).ilike('%' + q + '%'),
+            Client.name.ilike('%' + q + '%'))
+    totals = db.session.execute(db.select(
+        func.count(case((active, 1))),
+        func.count(case((active & (Order.due_date == day), 1))),
+        func.count(case((active & (Order.due_date < day), 1))),
+        func.count(case((active & ready, 1))),
+        func.count(case((condition, 1)))).select_from(Order).join(Client).outerjoin(Vehicle)).one()
+    counts = dict(zip(['open', 'today', 'late', 'ready'], totals[:4]))
+    query = db.select(Order).join(Client).outerjoin(Vehicle).where(condition).options(
+        db.joinedload(Order.vehicle), db.joinedload(Order.client), selectinload(Order.items))
+    page = db.paginate(query.order_by(Order.due_date.asc().nulls_last(), Order.id),
+                       per_page=12, error_out=False, count=False)
+    page.total = totals[4]
+    return render_template('dashboard.html', orders=page.items, page=page, counts=counts, view=view, q=q)
 
 @web.get('/modo-tv')
 @login_required
@@ -166,7 +185,7 @@ def tv_deadline(order):
 @login_required
 def workshop_tv_data():
     day=today()
-    active=Order.deleted_at.is_(None) & Order.finalized.is_(False)
+    active=active_workshop()
     orders=db.session.scalars(db.select(Order).where(active)
         .options(db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),
             selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user))
@@ -253,11 +272,20 @@ def filtered_orders():
         field = Order.invoiced_date if status == 'Faturado' else Order.received_date
         query = query.where(or_(field.is_not(None), Order.status == status))
     elif status in STATUSES:
-        query = query.where(Order.status == status)
-    if request.args.get('open')=='1':query=query.where(Order.finalized.is_(False))
+        query = query.where(Order.workshop_status == status)
+    if request.args.get('open')=='1':query=query.where(active_workshop())
     if request.args.get('finance')=='1':query=query.where(or_(Order.delivered_date.is_not(None),Order.invoiced_date.is_not(None)),Order.received_date.is_(None))
-    if request.args.get('due')=='today':query=query.where(Order.due_date==today(),Order.finalized.is_(False))
-    if request.args.get('due')=='late':query=query.where(Order.due_date<today(),Order.finalized.is_(False))
+    if request.args.get('due')=='today':query=query.where(Order.due_date==today(),active_workshop())
+    if request.args.get('due')=='late':query=query.where(Order.due_date<today(),active_workshop())
+    state = request.args.get('state', '')
+    if state == 'active': query = query.where(active_workshop())
+    elif state == 'ready': query = query.where(active_workshop(), Order.workshop_status == 'Pronto para entrega')
+    elif state == 'delivered': query = query.where(or_(Order.delivered_date.is_not(None), Order.delivered_at.is_not(None), Order.status == 'Entregue'))
+    elif state == 'finalized': query = query.where(Order.finalized.is_(True))
+    finance = request.args.get('financial', '')
+    if finance == 'unbilled': query = query.where(Order.invoiced_date.is_(None), Order.invoiced_at.is_(None), ~Order.status.in_(['Faturado','Recebido']))
+    elif finance == 'receivable': query = query.where(or_(Order.invoiced_date.is_not(None), Order.invoiced_at.is_not(None), Order.status == 'Faturado'), Order.received_date.is_(None), Order.received_at.is_(None), Order.status != 'Recebido')
+    elif finance == 'received': query = query.where(or_(Order.received_date.is_not(None), Order.received_at.is_not(None), Order.status == 'Recebido'))
     for key,operator in [('start',lambda d:Order.entry_date>=d),('end',lambda d:Order.entry_date<=d)]:
         raw=request.args.get(key)
         if raw:
@@ -338,6 +366,7 @@ def order_new():
     if form.validate_on_submit() and validate_order(form) and prepare_image('cover',form.cover_file):
         order=Order(parent_order_id=source.id if source else None);populate_order(form,order);order.entered_at=utcnow();order.status_changed_at=order.entered_at
         if not order.entry_date:order.entry_date=today()
+        order.workshop_due_date=form.workshop_due_date.data
         order.number=(form.number.data or '').strip().upper() or None
         save_image(order,'cover',form.cover_file)
         db.session.add(order);db.session.flush()
@@ -360,7 +389,7 @@ def order_edit(ident):
     form=OrderForm(obj=order);order_choices(form,order)
     if linked_order(order):
         form.client_id.choices=[choice for choice in form.client_id.choices if choice[0]==order.client_id]
-    if request.method=='GET':form.version.data=str(order.version)
+    if request.method=='GET':return redirect(url_for('web.order_detail', ident=ident))
     if form.validate_on_submit():
         mutable(order)
         if validate_order(form,order) and prepare_image('cover',form.cover_file):
@@ -370,7 +399,7 @@ def order_edit(ident):
             save_image(order,'cover',form.cover_file,form.remove_cover.data)
             event(order,'Dados da OS atualizados.');db.session.commit();flash('OS atualizada.','success')
             return redirect(url_for('web.order_detail',ident=ident))
-    return render_template('order_form.html',form=form,title=f'Editar {order.number}',back=url_for('web.order_detail',ident=ident),order=order)
+    return render_order(order, data_form=form)
 
 @web.get('/ordens/<int:ident>/foto-principal')
 @login_required
@@ -434,7 +463,8 @@ def save_exact_status(order, target, day):
     movement = STATUS_MOVEMENTS.get(target)
     # Cancellation is independent of the operational timeline.
     removed = []  # Updating one status must preserve independent milestones.
-    order.status = target
+    if target not in ('Faturado', 'Recebido'):
+        order.status = target
     if movement:
         setattr(order, movement + '_date', day)
         setattr(order, movement + '_at', stamp)
@@ -443,7 +473,8 @@ def save_exact_status(order, target, day):
         local_stamp = stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
         effective_stamp = datetime.combine(day, local_stamp.time(), tzinfo=WORKSHOP_ZONE)
         order.status_changed_at = effective_stamp.astimezone(timezone.utc).replace(tzinfo=None)
-    message = f'Fluxo atualizado: {previous} → {target}. Data do status: {day:%d/%m/%Y}.'
+    message = (f'Financeiro: {target}. Data: {day:%d/%m/%Y}.' if target in ('Faturado', 'Recebido')
+               else f'Fluxo atualizado: {previous} → {target}. Data do status: {day:%d/%m/%Y}.')
     if removed:
         message += ' Etapas limpas: ' + ', '.join(removed) + '.'
     event(order, message)
@@ -475,12 +506,86 @@ def configure_flow_correction(form):
     form.corrected_status.choices = [('', 'Manter status atual')] + [(status, status) for status in STATUSES]
 
 
+def render_order(order, data_form=None, cover_form=None, edit_forms=None):
+    related = linked_order(order)
+    data_form = data_form or OrderForm(formdata=None, obj=order, version=str(order.version))
+    order_choices(data_form, order)
+    if related:
+        data_form.client_id.choices = [choice for choice in data_form.client_id.choices if choice[0] == order.client_id]
+    status_form = StatusForm(formdata=None, status=order.workshop_status,
+        status_date=order.flow_status_date or today(), version=str(order.version))
+    status_form.status.choices = [(x, x) for x in STATUSES if x not in ('Faturado', 'Recebido')]
+    forms = {}
+    for item in order.items:
+        cls = ServiceForm if item.service_type else ItemForm
+        form = cls(formdata=None, obj=item, version=str(order.version))
+        if item.service_type: form.service_type.data = item.description
+        forms[item.id] = form
+    forms.update(edit_forms or {})
+    return render_template('order.html', order=order, related_order=related,
+        data_form=data_form, cover_form=cover_form or CoverForm(formdata=None, version=str(order.version)),
+        status_form=status_form, finalized_form=FinalizedForm(formdata=None, finalized=order.finalized, version=str(order.version)),
+        item_form=ItemForm(formdata=None, version=str(order.version)),
+        service_form=ServiceForm(formdata=None, version=str(order.version)), edit_forms=forms,
+        photo_form=PhotoForm(formdata=None, version=str(order.version)),
+        photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
+
+
 @web.get('/ordens/<int:ident>')
-@login_required
+@admin_required
 def order_detail(ident):
     order=get_order(ident,options=[db.joinedload(Order.vehicle),db.joinedload(Order.client),selectinload(Order.items),selectinload(Order.checks),selectinload(Order.photos),selectinload(Order.events).joinedload(Event.user)])
-    status_form=StatusForm(status=order.status,status_date=order.flow_status_date or today(),version=str(order.version),delivered_date=order.delivered_date or today());status_form.status.choices=[(x,x) for x in STATUSES if x not in ('Faturado','Recebido')]
-    return render_template('order.html',order=order,related_order=linked_order(order),status_form=status_form,finalized_form=FinalizedForm(finalized=order.finalized,version=str(order.version)),item_form=ItemForm(version=str(order.version)),service_form=ServiceForm(version=str(order.version)),photo_form=PhotoForm(version=str(order.version)),photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
+    return render_order(order)
+
+
+@web.post('/ordens/<int:ident>/dados')
+@admin_required
+def order_data(ident):
+    order = get_order(ident)
+    mutable(order)
+    form = OrderForm()
+    order_choices(form, order)
+    if linked_order(order):
+        form.client_id.choices = [choice for choice in form.client_id.choices if choice[0] == order.client_id]
+    if form.validate_on_submit() and validate_order(form, order):
+        old_entry = order.entry_date
+        order.number = (form.number.data or order.number).strip().upper()
+        populate_order(form, order)
+        order.workshop_due_date = form.workshop_due_date.data
+        # Keep entry date and its timeline record consistent when edited in Dados.
+        if old_entry != order.entry_date:
+            if order.entry_date:
+                stamp = order.entered_at or utcnow()
+                local = stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
+                order.entered_at = datetime.combine(order.entry_date, local.time(), tzinfo=WORKSHOP_ZONE).astimezone(timezone.utc).replace(tzinfo=None)
+            else:
+                order.entered_at = None
+        event(order, 'Dados da OS atualizados.')
+        db.session.commit()
+        flash('Dados salvos.', 'success')
+        return redirect(url_for('web.order_detail', ident=ident))
+    return render_order(order, data_form=form), 400
+
+
+@web.post('/ordens/<int:ident>/capa')
+@admin_required
+def order_cover_update(ident):
+    order = get_order(ident)
+    mutable(order)
+    form = CoverForm()
+    if form.remove_cover.data:
+        form.cover_file.data = None
+    if form.validate_on_submit():
+        if not form.cover_file.data and not form.remove_cover.data:
+            form.cover_file.errors.append('Selecione uma imagem para a capa.')
+        elif prepare_image('cover', form.cover_file):
+            save_image(order, 'cover', form.cover_file, form.remove_cover.data)
+            event(order, 'Capa do veículo removida.' if form.remove_cover.data and not form.cover_file.data else 'Capa do veículo atualizada.')
+            db.session.commit()
+            flash('Capa atualizada. As fotos do atendimento foram preservadas.', 'success')
+            return redirect(url_for('web.order_detail', ident=ident))
+    return render_order(order, cover_form=form), 400
+
 
 def record_status(order,target,day=None,reference=''):
     stamp=utcnow();day=day or today();previous=order.status
@@ -489,8 +594,11 @@ def record_status(order,target,day=None,reference=''):
     if prefix:
         setattr(order,prefix+'_date',day);setattr(order,prefix+'_at',stamp)
     # Preserve other movement records. A selection never clears another step.
-    order.status=target;order.status_changed_at=stamp
-    event(order,f'Status: {previous} → {target}.'+(f' Observação: {reference}' if reference else ''))
+    if target not in ('Faturado', 'Recebido'):
+        order.status=target;order.status_changed_at=stamp
+    message = (f'Financeiro: {target}. Data: {day:%d/%m/%Y}.' if target in ('Faturado', 'Recebido')
+               else f'Status: {previous} → {target}.')
+    event(order,message+(f' Observação: {reference}' if reference else ''))
 
 @web.post('/ordens/<int:ident>/fluxo')
 @login_required
@@ -597,7 +705,7 @@ def order_finalize(ident):
     mutable(order)
     order.finalized = form.finalized.data
     event(order, 'Atendimento finalizado: removido do painel.' if order.finalized
-          else 'Atendimento reaberto: voltou ao painel.')
+          else 'Finalização desmarcada. A exibição no painel depende de não haver entrega ou cancelamento.')
     db.session.commit()
     flash('Finalização atualizada.', 'success')
     return redirect(url_for('web.order_detail', ident=ident))
@@ -675,6 +783,8 @@ def item_add(ident):
 def item_edit(ident,item_id):
     order=get_order(ident);item=db.get_or_404(Item,item_id)
     if item.order_id!=ident:abort(404)
+    if request.method == 'GET':
+        return redirect(url_for('web.order_detail', ident=ident, tab='items-panel'))
     if item.service_type:
         form=ServiceForm(obj=item)
         if request.method == 'GET':
@@ -688,7 +798,7 @@ def item_edit(ident,item_id):
             item.responsible=(form.responsible.data or '').strip()
             event(order,f'Serviço atualizado: {item.description}.');db.session.commit()
             flash('Serviço salvo.','success');return redirect(url_for('web.order_detail',ident=ident))
-        return render_template('form.html',form=form,title='Editar serviço',back=url_for('web.order_detail',ident=ident))
+        return render_order(order, edit_forms={item.id: form}), 400
     form=ItemForm(obj=item)
     if request.method=='GET':form.version.data=str(order.version)
     if form.validate_on_submit():
@@ -697,7 +807,7 @@ def item_edit(ident,item_id):
         keep_discount_valid(order,order.subtotal()-item.total+proposed)
         form.populate_obj(item);event(order,f'Item atualizado: {item.description}.');db.session.commit()
         flash('Item atualizado.','success');return redirect(url_for('web.order_detail',ident=ident))
-    return render_template('form.html',form=form,title='Editar serviço / peça',back=url_for('web.order_detail',ident=ident))
+    return render_order(order, edit_forms={item.id: form}), 400
 
 @web.post('/ordens/<int:ident>/itens/<int:item_id>/acao')
 @login_required
@@ -735,7 +845,7 @@ def photo_add(ident):
         flash('Envie uma imagem JPEG, PNG ou WebP válida, com até 25 megapixels.','error');return redirect(url_for('web.order_detail',ident=ident))
     configure_photos()
     try:
-        uploaded=cloudinary.uploader.upload(file.stream,folder=f'easy-servicos/os-{ident}',type='authenticated',resource_type='image',allowed_formats=['jpg','jpeg','png','webp'],timeout=30)
+        uploaded=cloudinary.uploader.upload(io.BytesIO(form.file.optimized),folder=f'easy-servicos/os-{ident}',type='authenticated',resource_type='image',allowed_formats=['jpg','jpeg','png','webp'],timeout=30)
     except Exception:
         current_app.logger.warning('Falha no envio da foto para o armazenamento externo.')
         flash('Não foi possível enviar a foto. Tente novamente.','error');return redirect(url_for('web.order_detail',ident=ident))
@@ -827,6 +937,19 @@ def photo_view(ident):
         response.raise_for_status()
         mime=response.headers.get('Content-Type','').split(';')[0]
         if mime not in ['image/jpeg','image/png','image/webp']:abort(502)
+        if request.args.get('thumb') == '1':
+            from PIL import Image, ImageOps, UnidentifiedImageError
+            try:
+                with Image.open(io.BytesIO(response.content)) as image:
+                    if image.width * image.height > 25_000_000: abort(502)
+                    image = ImageOps.exif_transpose(image)
+                    image.thumbnail((480, 480))
+                    output = io.BytesIO()
+                    image.convert('RGB').save(output, 'WEBP', quality=76)
+                    output.seek(0)
+                return send_file(output, mimetype='image/webp')
+            except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+                abort(502)
         return send_file(io.BytesIO(response.content),mimetype=mime)
     except requests.RequestException:abort(502)
 
@@ -852,11 +975,11 @@ def report_export():
     rows=db.session.scalars(filtered_orders().options(selectinload(Order.checks)).limit(10001)).all()
     if len(rows)>10000:abort(400,description='Filtre o período para exportar até 10 mil OS.')
     book=Workbook();sheet=book.active;sheet.title='Ordens de serviço'
-    sheet.append(['OS','Cliente','Placa','Frota','Entrada','Previsão entrega','Entrega real','Status','Serviços','Peças','Desconto','Total','Aprovação','Início do serviço','Pronto','Faturamento','Recebimento','Etapa do fluxo','Registro da entrada','Registro da aprovação','Registro do início','Registro pronto','Registro da saída','Registro do faturamento','Registro do recebimento','Último movimento de status'])
+    sheet.append(['OS','Cliente','Placa','Frota','Entrada','Previsão entrega','Entrega real','Status','Serviços','Peças','Desconto','Total','Aprovação','Início do serviço','Pronto','Faturamento','Recebimento','Etapa do fluxo','Registro da entrada','Registro da aprovação','Registro do início','Registro pronto','Registro da saída','Registro do faturamento','Registro do recebimento','Último movimento de status','Financeiro','Finalizado','Prazo equipe'])
     items=book.create_sheet('Serviços e peças');items.append(['OS','Tipo','Descrição','Quantidade','Valor unitário','Total','Responsável','Concluído','Tipo de serviço','Peças utilizadas'])
     checks=book.create_sheet('Checklist');checks.append(['OS','Etapa','Item','Resultado','Observações'])
     for order in rows:
-        sheet.append([safe_cell(x) for x in [order.number,order.client.name,order.plate,order.fleet,order.entry_date,order.due_date,order.delivered_date,order.status,order.subtotal('servico'),order.subtotal('peca'),order.discount,order.total,order.approved_date,order.started_date,order.ready_date,order.invoiced_date,order.received_date,order.flow_label,*[current_app.jinja_env.filters['localtime'](stamp) if stamp else '' for stamp in [order.entered_at,order.approved_at,order.started_at,order.ready_at,order.delivered_at,order.invoiced_at,order.received_at,order.status_changed_at]]]])
+        sheet.append([safe_cell(x) for x in [order.number,order.client.name,order.plate,order.fleet,order.entry_date,order.due_date,order.delivered_date,order.workshop_status,order.subtotal('servico'),order.subtotal('peca'),order.discount,order.total,order.approved_date,order.started_date,order.ready_date,order.invoiced_date,order.received_date,order.flow_label,*[current_app.jinja_env.filters['localtime'](stamp) if stamp else '' for stamp in [order.entered_at,order.approved_at,order.started_at,order.ready_at,order.delivered_at,order.invoiced_at,order.received_at,order.status_changed_at]],order.finance_label,'Sim' if order.finalized else 'Não',order.workshop_due_date]])
         for item in order.items:items.append([safe_cell(x) for x in [order.number,item.kind,item.description,item.quantity,item.unit_price,item.total,item.responsible,'Sim' if item.done else 'Não',item.service_type or '',item.used_parts or '']])
         for check in order.checks:checks.append([safe_cell(x) for x in [order.number,check.stage,check.label,check.result,check.notes]])
     from openpyxl.styles import Font, PatternFill

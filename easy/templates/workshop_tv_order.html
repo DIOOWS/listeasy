@@ -15,7 +15,7 @@
     {% endif %}
     <div><dt>Saída</dt><dd>{{ order.delivered_at|localtime if order.delivered_at else order.delivered_date|datebr }}</dd></div>
     <div><dt>Responsável</dt><dd>{{ order.responsible or '—' }}</dd></div>
-    <div><dt>Status</dt><dd>{{ order.status }}</dd></div>
+    <div><dt>Status</dt><dd>{{ order.workshop_status }}</dd></div>
   </dl>
   {% for title, value in [('Solicitação',order.problem),('Diagnóstico',order.diagnosis),('Observações',order.notes)] if value %}
     <h4>{{ title }}</h4><p class="tv-detail-text">{{ value }}</p>

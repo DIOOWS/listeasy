@@ -10,7 +10,7 @@
         <rect pathLength="100" />
       </svg>
       <div class="tv-card-top"><strong>{{ order.plate or order.fleet or 'Sem placa' }}</strong><span>Nº OS {{ order.number or order.id }} <i aria-hidden="true"></i></span></div>
-      <div class="tv-card-labels"><div class="tv-badges"><span class="tv-status">{{ order.status }}</span>{% if overdue %}<span class="tv-status">Atrasada</span>{% endif %}</div>
+      <div class="tv-card-labels"><div class="tv-badges"><span class="tv-status">{{ order.workshop_status }}</span>{% if overdue %}<span class="tv-status">Atrasada</span>{% endif %}</div>
       {% if order.client.logo_key %}<div class="tv-client"><img src="{{ url_for('web.client_logo',ident=order.client.id,v=order.client.logo_key) }}" alt="" loading="lazy" decoding="async"><strong>{{ order.client.name }}</strong></div>{% endif %}</div>
       <div class="tv-card-info{% if order.cover_key %} tv-card-with-photo{% endif %}">
       <dl>

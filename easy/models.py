@@ -3,6 +3,8 @@ from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy import case, or_
 from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
@@ -124,11 +126,39 @@ class Order(db.Model):
     @property
     def fleet(self):
         return self.vehicle_fleet if self.vehicle_fleet is not None else self.vehicle.fleet if self.vehicle else ''
+    @hybrid_property
+    def workshop_status(self):
+        # Legacy financial statuses are projected without rewriting stored data.
+        if self.status not in ('Faturado', 'Recebido'):
+            return self.status
+        for prefix, status in [('delivered', 'Entregue'), ('ready', 'Pronto para entrega'),
+                               ('started', 'Em serviço'), ('approved', 'Aprovado')]:
+            if getattr(self, prefix + '_date') or getattr(self, prefix + '_at'):
+                return status
+        return 'Aguardando avaliação'
+
+    @workshop_status.expression
+    def workshop_status(cls):
+        recorded = lambda prefix: or_(getattr(cls, prefix + '_date').is_not(None),
+                                     getattr(cls, prefix + '_at').is_not(None))
+        return case((cls.status.in_(['Faturado', 'Recebido']), case(
+            (recorded('delivered'), 'Entregue'), (recorded('ready'), 'Pronto para entrega'),
+            (recorded('started'), 'Em serviço'), (recorded('approved'), 'Aprovado'),
+            else_='Aguardando avaliação')), else_=cls.status)
+
+    @property
+    def finance_label(self):
+        if self.received_date or self.received_at or self.status == 'Recebido':
+            return 'Recebido'
+        if self.invoiced_date or self.invoiced_at or self.status == 'Faturado':
+            return 'Faturado'
+        return 'Não faturado'
+
     @property
     def status_tone(self):
         return {'Aguardando avaliação':'gray', 'Aguardando aprovação':'brown',
                 'Aguardando peças':'orange', 'Em serviço':'blue', 'Aprovado':'amber', 'Faturado':'purple', 'Recebido':'indigo',
-                'Pronto para entrega':'green', 'Entregue':'teal', 'Cancelada':'red'}.get(self.status,'gray')
+                'Pronto para entrega':'green', 'Entregue':'teal', 'Cancelada':'red'}.get(self.workshop_status,'gray')
     @property
     def flow_tone(self):
         return self.status_tone
@@ -139,7 +169,8 @@ class Order(db.Model):
         return (self.subtotal() - self.discount).quantize(Decimal('0.01'))
     @property
     def closed(self):
-        return bool(self.finalized)
+        return bool(self.finalized or self.delivered_date or self.delivered_at
+                    or self.workshop_status in ('Entregue', 'Cancelada'))
     @property
     def service_progress(self):
         services = [x for x in self.items if x.kind == 'servico']
@@ -167,15 +198,14 @@ class Order(db.Model):
             ('invoiced', 'Faturado', self.invoiced_date, self.invoiced_at),
             ('received', 'Recebido', self.received_date, self.received_at)]
         current = {'Aprovado': 'approved', 'Em serviço': 'started',
-                   'Pronto para entrega': 'ready', 'Entregue': 'delivered',
-                   'Faturado': 'invoiced', 'Recebido': 'received'}.get(self.status)
+                   'Pronto para entrega': 'ready', 'Entregue': 'delivered'}.get(self.workshop_status)
         return [dict(key=key, label=label, date=day, timestamp=stamp,
                      state=('current' if key == current else 'done') if day or stamp else 'pending')
                 for key, label, day, stamp in steps]
 
     @property
     def flow_label(self):
-        return self.status
+        return self.workshop_status
 
 class Item(db.Model):
     __tablename__ = 'ecs_items'

@@ -32,13 +32,18 @@ class OrderForm(FlaskForm):
     model = StringField('Marca / modelo', validators=[Optional(), Length(max=120)], render_kw={'placeholder':'Ex.: Fiat Ducato'})
     fleet = StringField('Número da frota (opcional)', validators=[Optional(), Length(max=40)])
     entry_date = DateField('Data de entrada (opcional)', validators=[Optional()])
-    due_date = DateField('Previsão de entrega (opcional)', validators=[Optional()])
-    workshop_due_date = DateField('Prazo da oficina (opcional)', validators=[Optional()])
+    due_date = DateField('Prazo de entrega — administrador (opcional)', validators=[Optional()])
+    workshop_due_date = DateField('Prazo de entrega — equipe (opcional)', validators=[Optional()])
     mileage = IntegerField('Quilometragem', validators=[Optional(), NumberRange(min=0, max=2147483647)])
     responsible = StringField('Responsável pelo atendimento', validators=[Optional(), Length(max=120)])
     problem = TextAreaField('Problema relatado / solicitação', validators=[Optional(), Length(max=10000)])
     diagnosis = TextAreaField('Diagnóstico', validators=[Optional(), Length(max=10000)])
     notes = TextAreaField('Observações', validators=[Optional(), Length(max=10000)])
+    version = HiddenField()
+
+class CoverForm(FlaskForm):
+    cover_file = FileField('Selecionar capa', validators=[optimize_upload(960)], render_kw=IMAGE_ACCEPT)
+    remove_cover = BooleanField('Remover capa')
     version = HiddenField()
 
 class ItemForm(FlaskForm):
@@ -78,7 +83,7 @@ class PhotoMetadataForm(FlaskForm):
 
 
 class PhotoForm(PhotoMetadataForm):
-    file = FileField('Foto (JPEG, PNG ou WebP, até 8 MB)', validators=[FileRequired()])
+    file = FileField('Foto (JPEG, PNG ou WebP, até 8 MB)', validators=[FileRequired(), optimize_upload(2048)])
 
 
 class PhotoEditForm(PhotoMetadataForm):

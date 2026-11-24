@@ -1,9 +1,22 @@
-{% extends 'base.html' %}{% from 'flow.html' import flow_row,legend with context %}{% block content %}
-<div class="dashboard">
-<div class="heading"><div><h1>Atendimentos</h1><p class="muted">{{ today|datebr }} · acompanhe o fluxo</p></div><div class="actions"><a class="button secondary" href="{{ url_for('web.workshop_tv') }}" target="_blank" rel="noopener">Modo TV</a><a class="button" href="{{ url_for('web.order_new') }}">+ Nova OS</a></div></div>
-<div class="metrics dashboard-metrics"><a class="metric" href="{{ url_for('web.orders',open='1') }}"><strong>{{ counts.open }}</strong><span>Em atendimento</span></a><a class="metric" href="{{ url_for('web.orders',due='today') }}"><strong>{{ counts.today }}</strong><span>Entrega hoje</span></a><a class="metric" href="{{ url_for('web.orders',due='late') }}"><strong>{{ counts.late }}</strong><span>Em atraso</span></a></div>
-<section class="vehicle-list" aria-label="Fluxo dos atendimentos"><div class="heading small list-heading"><h2>Fluxo dos atendimentos</h2><a href="{{ url_for('web.orders') }}">Ver todas</a></div>{{ legend() }}{% if finance_count %}<p class="flow-finance-note"><a href="{{ url_for('web.orders',finance='1') }}">{{ finance_count }} OS entregue(s) com pendência financeira</a></p>{% endif %}
-{% for o in orders %}{{ flow_row(o) }}
-{% else %}<div class="empty"><h2>Nenhum atendimento pendente</h2><p>Abra sua primeira OS e preencha os dados do veículo diretamente nela.</p><div class="actions"><a class="button secondary" href="{{ url_for('web.client_form') }}">Cadastrar cliente</a><a class="button" href="{{ url_for('web.order_new') }}">Nova OS</a></div></div>{% endfor %}</section>
-
-</div>{% endblock %}
+{% extends 'base.html' %}{% from 'macros.html' import pagination with context %}{% block content %}
+<div class="page-kicker">Início / Painel</div>
+<div class="heading"><div><h1>Painel da oficina</h1><p class="muted">{{ today|datebr }} · acompanhe os atendimentos do dia</p></div><div class="actions"><a class="button secondary" href="{{ url_for('web.workshop_tv') }}" target="_blank" rel="noopener">▣ Modo TV</a><a class="button" href="{{ url_for('web.order_new') }}">+ Nova OS</a></div></div>
+<div class="overview-metrics">
+{% for key,label,symbol in [('open','Em atendimento','⚒'),('today','Entrega hoje','▦'),('late','Em atraso','!'),('ready','Pronto para entrega','✓')] %}
+<a class="overview-metric metric-{{ key }}" href="{{ url_for('web.dashboard',view='' if key=='open' else key) }}"><span class="metric-icon" aria-hidden="true">{{ symbol }}</span><div><strong>{{ counts[key] }}</strong><span>{{ label }}</span></div></a>
+{% endfor %}</div>
+<div class="dashboard-toolbar"><div class="quick-filters" aria-label="Filtrar atendimentos">
+{% for key,label,count in [('', 'Todos',counts.open),('late','Em atraso',counts.late),('today','Entrega hoje',counts.today),('ready','Prontos',counts.ready)] %}<a class="filter-chip {{ 'selected' if view==key }}" href="{{ url_for('web.dashboard',view=key,q=q) }}" {% if view==key %}aria-current="page"{% endif %}>{{ label }} ({{ count }})</a>{% endfor %}</div>
+<form method="get" class="dashboard-search" role="search"><input type="hidden" name="view" value="{{ view }}"><label class="flow-sr" for="dashboard-q">Buscar OS, placa ou cliente</label><input class="input" id="dashboard-q" name="q" value="{{ q }}" placeholder="Buscar OS, placa ou cliente"><button class="button secondary" type="submit">Buscar</button></form></div>
+<div class="heading small"><h2>Veículos em atendimento</h2><a href="{{ url_for('web.orders') }}">Ver todas as OS →</a></div>
+<div class="workshop-cards">{% for order in orders %}
+{% set services=order.items|selectattr('kind','equalto','servico')|list %}
+{% set staff=services|selectattr('responsible')|map(attribute='responsible')|unique|list %}
+<article class="workshop-card tone-{{ order.status_tone }}">
+{% if order.cover_key %}<img class="card-cover" src="{{ url_for('web.order_cover',ident=order.id,v=order.cover_key) }}" alt="Capa de {{ order.plate or order.model or 'veículo' }}" loading="lazy" decoding="async">{% else %}<div class="card-cover card-placeholder" aria-label="Veículo sem capa"><svg viewBox="0 0 64 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 31V14h34l10 10h8v14H6Z M40 14v14h17 M13 14V7h21v7"/><circle cx="17" cy="38" r="5"/><circle cx="47" cy="38" r="5"/></svg><span>Sem capa</span></div>{% endif %}
+<div class="workshop-card-body"><div class="card-heading"><h3>{{ order.plate or order.fleet or 'Sem placa' }}</h3><span>{{ order.number }}</span></div><p>{{ order.client.name }}</p><p class="muted card-service">{{ order.model or 'Veículo não informado' }} · {{ services[0].description if services else order.problem or 'Serviço não informado' }}</p><p class="muted">{{ staff[:2]|join(', ') or order.responsible or 'Responsável não informado' }}</p>
+<div class="card-bottom"><span class="status-pill tone-{{ order.status_tone }}">{{ order.workshop_status }}</span><a class="button secondary small-button" href="{{ url_for('web.order_detail',ident=order.id) }}">Abrir OS →</a></div>
+<p class="card-deadline {{ 'late-text' if order.due_date and order.due_date<today }}">Prazo: {{ 'Hoje · ' if order.due_date==today }}{{ order.due_date|datebr if order.due_date else 'Sem previsão' }}{% if order.due_date and order.due_date<today %} · <strong>Em atraso</strong>{% endif %}</p></div></article>
+{% else %}<div class="empty panel"><h2>Nenhum atendimento encontrado</h2><p>Altere os filtros ou abra uma nova OS.</p><a class="button" href="{{ url_for('web.order_new') }}">+ Nova OS</a></div>{% endfor %}</div>
+{{ pagination(page) }}<div class="dashboard-foot"><span>Os cards acompanham o andamento da oficina.</span><a href="{{ url_for('web.orders',state='finalized') }}">Consultar ordens finalizadas →</a></div>
+{% endblock %}
