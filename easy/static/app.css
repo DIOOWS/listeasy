@@ -47,3 +47,24 @@ body.navigating::before{content:'';position:fixed;top:0;left:0;width:35%;height:
 .order-cover-preview{width:21rem;height:12rem;background:#f8fafc}
 .order-cover-figure{margin:1rem 0}
 .order-cover-figure figcaption{margin-top:.35rem}
+
+#photo-dialog{
+  width:min(680px,calc(100% - 24px));
+  max-height:calc(100dvh - 24px);
+  overflow:auto;
+  padding:clamp(12px,3vw,22px);
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--surface);
+  color:var(--ink);
+}
+#photo-dialog::backdrop{background:rgb(0 0 0 / 65%)}
+.photo-dialog-image{
+  display:block;
+  width:100%;
+  height:clamp(160px,42dvh,420px);
+  object-fit:contain;
+  background:var(--soft);
+  border-radius:6px;
+  margin-bottom:16px;
+}

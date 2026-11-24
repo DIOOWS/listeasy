@@ -164,6 +164,31 @@
   const target=event.target.closest('button,a,dialog');if(!target)return;
   if(target.matches('[data-confirm]')&&!confirm(target.dataset.confirm)){event.preventDefault();return;}
   if(target.matches('[data-tab]')){event.preventDefault();activate(target);return;}
+  const photoDialog=document.getElementById('photo-dialog');
+  const photoLink=target.matches('[data-edit-photo]')?target.closest('figure').querySelector('[data-photo-dialog]'):target;
+  if(photoDialog&&photoLink.matches('[data-photo-dialog]')&&event.button===0&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){
+   event.preventDefault();
+   const image=photoDialog.querySelector('img');
+   image.src=photoLink.href;
+   image.alt=photoLink.dataset.caption||'Foto anexada à OS';
+   const form=photoDialog.querySelector('form');
+   if(form&&photoLink.dataset.editUrl){
+    form.reset();
+    delete form.dataset.dirty;
+    form.querySelector('.request-message')?.remove();
+    form.action=photoLink.dataset.editUrl;
+    form.elements.stage.value=photoLink.dataset.stage;
+    form.elements.caption.value=photoLink.dataset.caption;
+   }
+   photoDialog.showModal();
+   return;
+  }
+  if(photoDialog&&target===photoDialog){
+   const rect=photoDialog.getBoundingClientRect();
+   if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)photoDialog.close();
+   return;
+  }
+  if(target.matches('[data-close-photo]')){photoDialog?.close();return;}
   const menu=document.getElementById('app-menu');
   if(target.matches('[data-open-menu]')){menu?.showModal();return;}
   if(target.matches('[data-close-menu]')){menu?.close();return;}

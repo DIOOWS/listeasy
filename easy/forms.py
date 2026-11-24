@@ -62,11 +62,18 @@ class StatusForm(FlaskForm):
     delivered_date = DateField('Data real da entrega (vazio = hoje)', validators=[Optional()])
     version = HiddenField()
 
-class PhotoForm(FlaskForm):
-    file = FileField('Foto (JPEG, PNG ou WebP, até 8 MB)', validators=[FileRequired()])
+class PhotoMetadataForm(FlaskForm):
     stage = SelectField('Etapa', choices=[('entrada','Entrada'),('servico','Serviço'),('saida','Entrega')])
     caption = StringField('Descrição', validators=[Optional(), Length(max=200)])
     version = HiddenField()
+
+
+class PhotoForm(PhotoMetadataForm):
+    file = FileField('Foto (JPEG, PNG ou WebP, até 8 MB)', validators=[FileRequired()])
+
+
+class PhotoEditForm(PhotoMetadataForm):
+    file = FileField('Substituir foto (opcional)', validators=[optimize_upload(2048)], render_kw=IMAGE_ACCEPT)
 
 class FlowForm(FlaskForm):
     action = SelectField('Atualização do fluxo', choices=[

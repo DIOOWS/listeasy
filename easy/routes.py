@@ -12,9 +12,9 @@ from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db, limiter, today
 from .models import User, Client, Vehicle, Order, Item, Check, Event, Photo, STATUSES, STATUS_MOVEMENTS, WORKSHOP_ZONE, ENTRY_CHECKS, EXIT_CHECKS, utcnow
-from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, UserForm, FlowForm, ServiceForm
+from .forms import LoginForm, ClientForm, OrderForm, ItemForm, StatusForm, PhotoForm, PhotoEditForm, UserForm, FlowForm, ServiceForm
 
-from .media import configure_photos, prepare_image, save_image, serve_image
+from .media import configure_photos, image_public_id, prepare_image, save_image, serve_image
 
 web=Blueprint('web',__name__)
 DUMMY_HASH=generate_password_hash('dummy-password-never-a-login')
@@ -664,6 +664,68 @@ def photo_add(ident):
         except Exception:current_app.logger.warning('Falha ao limpar foto órfã.')
         raise
     flash('Foto anexada.','success');return redirect(url_for('web.order_detail',ident=ident))
+
+@web.route('/fotos/<int:ident>/editar', methods=['GET', 'POST'])
+@admin_required
+def photo_edit(ident):
+    photo = db.get_or_404(Photo, ident)
+    order = photo.order
+    if order.deleted_at:
+        abort(404)
+
+    form = PhotoEditForm(obj=photo)
+    back = url_for('web.order_detail', ident=order.id)
+    if request.method == 'GET':
+        form.version.data = str(order.version)
+    if form.validate_on_submit():
+        mutable(order)
+        if prepare_image('anexos', form.file):
+            new_public_id = None
+            if form.file.reference:
+                new_public_id = image_public_id('anexos', form.file.reference)
+                photo.public_id = new_public_id
+                photo.format = 'webp'
+            photo.stage = form.stage.data
+            photo.caption = (form.caption.data or '').strip()
+            event(order, 'Foto anexada substituída.' if new_public_id else 'Dados da foto anexada atualizados.')
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                if new_public_id:
+                    from cloudinary.uploader import destroy
+                    try:
+                        destroy(new_public_id, type='authenticated', resource_type='image')
+                    except Exception:
+                        current_app.logger.warning('Falha ao limpar a foto substituta após erro ao salvar.')
+                raise
+            flash('Foto atualizada.', 'success')
+            return redirect(back)
+
+    return render_template('photo_edit.html', form=form, photo=photo, back=back,
+                           photos_enabled=bool(current_app.config['CLOUDINARY_URL']))
+
+
+@web.post('/fotos/<int:ident>/excluir')
+@admin_required
+def photo_delete(ident):
+    photo = db.get_or_404(Photo, ident)
+    order = get_order(photo.order_id)
+    mutable(order)
+    public_id = photo.public_id
+    db.session.delete(photo)
+    event(order, 'Foto anexada excluída.')
+    db.session.commit()
+    if current_app.config.get('CLOUDINARY_URL'):
+        try:
+            import cloudinary.uploader
+            configure_photos()
+            cloudinary.uploader.destroy(public_id, type='authenticated', resource_type='image')
+        except Exception:
+            current_app.logger.warning('Foto removida da OS; limpeza no Cloudinary pendente.')
+    flash('Foto excluída.', 'success')
+    return redirect(url_for('web.order_detail', ident=order.id))
+
 
 @web.get('/fotos/<int:ident>')
 @login_required

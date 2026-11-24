@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import field %}
+{% block content %}
+<div class="heading">
+  <h1>Editar foto</h1>
+  <a href="{{ back }}" class="button secondary">Voltar à OS</a>
+</div>
+<form method="post" enctype="multipart/form-data" class="panel">
+  {{ form.hidden_tag() }}
+  {% if photos_enabled %}
+    <figure class="order-cover-figure">
+      <img class="order-cover-preview" src="{{ url_for('web.photo_view', ident=photo.id) }}" alt="{{ photo.caption or 'Foto anexada à OS' }}">
+    </figure>
+  {% endif %}
+  <div class="form-grid">
+    {{ field(form.stage) }}
+    {{ field(form.caption) }}
+    {% if photos_enabled %}{{ field(form.file) }}{% endif %}
+  </div>
+  <button class="button" type="submit">Salvar foto</button>
+</form>
+{% endblock %}

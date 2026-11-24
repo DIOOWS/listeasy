@@ -37,6 +37,51 @@
 <div class="tabs" role="tablist" aria-label="Informações da OS"><button class="tab active" id="tab-check" role="tab" aria-selected="true" aria-controls="check-panel" data-tab="check-panel">Checklist</button><button class="tab" id="tab-items" role="tab" aria-selected="false" aria-controls="items-panel" data-tab="items-panel">Serviços e peças</button><button class="tab" id="tab-photos" role="tab" aria-selected="false" aria-controls="photos-panel" data-tab="photos-panel">Fotos</button><button class="tab" id="tab-delivery" role="tab" aria-selected="false" aria-controls="delivery-panel" data-tab="delivery-panel">Entrega</button><button class="tab" id="tab-history" role="tab" aria-selected="false" aria-controls="history-panel" data-tab="history-panel">Histórico</button></div>
 <div id="check-panel" role="tabpanel" aria-labelledby="tab-check" data-panel><h2>Checklist de entrada</h2><form method="post" action="{{ url_for('web.checklist',ident=order.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ order.version }}"><input type="hidden" name="stage" value="entrada"><fieldset>{% for c in order.checks if c.stage=='entrada' %}<div class="check-row"><label for="result_{{ c.id }}">{{ c.label }}</label><select class="input" id="result_{{ c.id }}" name="result_{{ c.id }}">{% for key,label in [('pendente','Pendente'),('ok','OK'),('avaria','Atenção / avaria'),('na','Não se aplica')] %}<option value="{{ key }}" {{ 'selected' if c.result==key }}>{{ label }}</option>{% endfor %}</select><input class="input" name="notes_{{ c.id }}" value="{{ c.notes or '' }}" maxlength="500" placeholder="Observação / descrição da avaria" aria-label="Observação de {{ c.label }}"></div>{% endfor %}<button class="button">Salvar checklist de entrada</button></fieldset></form></div>
 {% include 'service_panel.html' %}
-<div id="photos-panel" role="tabpanel" aria-labelledby="tab-photos" data-panel hidden><h2>Fotos do veículo e do serviço</h2><div class="photo-grid">{% for photo in order.photos %}<figure><a href="{{ url_for('web.photo_view',ident=photo.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('web.photo_view',ident=photo.id) }}" alt="{{ photo.caption or 'Foto do veículo' }}" loading="lazy"></a><figcaption>{{ photo.stage|capitalize }} · {{ photo.caption }}</figcaption></figure>{% else %}<p class="muted">Nenhuma foto anexada.</p>{% endfor %}</div>{% if photos_enabled %}<form method="post" enctype="multipart/form-data" action="{{ url_for('web.photo_add',ident=order.id) }}">{{ photo_form.hidden_tag() }}<div class="form-grid"><div class="field">{{ photo_form.file.label }}{{ photo_form.file(class_="input",accept="image/jpeg,image/png,image/webp",capture="environment") }}</div>{{ field(photo_form.stage) }}{{ field(photo_form.caption) }}</div><button class="button">Anexar foto</button></form>{% elif not photos_enabled %}<p class="muted">O envio de fotos será liberado após configurar o armazenamento.</p>{% endif %}</div>
+<div id="photos-panel" role="tabpanel" aria-labelledby="tab-photos" data-panel hidden><h2>Fotos do veículo e do serviço</h2><div class="photo-grid">{% for photo in order.photos %}<figure><a href="{{ url_for('web.photo_view',ident=photo.id) }}" data-photo-dialog
+  data-caption="{{ photo.caption or '' }}" data-stage="{{ photo.stage }}"
+  {% if current_user.role == 'admin' %}data-edit-url="{{ url_for('web.photo_edit',ident=photo.id) }}"{% endif %}><img src="{{ url_for('web.photo_view',ident=photo.id) }}" alt="{{ photo.caption or 'Foto do veículo' }}" loading="lazy"></a><figcaption>{{ photo.stage|capitalize }} · {{ photo.caption }}</figcaption>
+{% if current_user.role == 'admin' %}
+<div class="actions">
+  <button class="button secondary" type="button" data-edit-photo>Editar</button>
+  <form method="post" action="{{ url_for('web.photo_delete',ident=photo.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="version" value="{{ order.version }}">
+    <button class="button danger" type="submit" data-confirm="Excluir esta foto da OS?">Excluir</button>
+  </form>
+</div>
+{% endif %}
+</figure>{% else %}<p class="muted">Nenhuma foto anexada.</p>{% endfor %}</div>{% if photos_enabled %}<form method="post" enctype="multipart/form-data" action="{{ url_for('web.photo_add',ident=order.id) }}">{{ photo_form.hidden_tag() }}<div class="form-grid"><div class="field">{{ photo_form.file.label }}{{ photo_form.file(class_="input",accept="image/jpeg,image/png,image/webp",capture="environment") }}</div>{{ field(photo_form.stage) }}{{ field(photo_form.caption) }}</div><button class="button">Anexar foto</button></form>{% elif not photos_enabled %}<p class="muted">O envio de fotos será liberado após configurar o armazenamento.</p>{% endif %}</div>
 <div id="delivery-panel" role="tabpanel" aria-labelledby="tab-delivery" data-panel hidden><h2>Checklist de entrega</h2><form method="post" action="{{ url_for('web.checklist',ident=order.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ order.version }}"><input type="hidden" name="stage" value="saida"><fieldset>{% for c in order.checks if c.stage=='saida' %}<div class="check-row"><label for="result_{{ c.id }}">{{ c.label }}</label><select class="input" id="result_{{ c.id }}" name="result_{{ c.id }}"><option value="pendente" {{ 'selected' if c.result!='ok' }}>Pendente</option><option value="ok" {{ 'selected' if c.result=='ok' }}>OK</option></select><input class="input" name="notes_{{ c.id }}" value="{{ c.notes or '' }}" maxlength="500" placeholder="Observação" aria-label="Observação de {{ c.label }}"></div>{% endfor %}<button class="button">Salvar checklist de entrega</button></fieldset></form><p class="muted">Saída registrada: {{ order.delivered_at|localtime if order.delivered_at else 'Não registrada' }}</p></div>
+<dialog id="photo-dialog" aria-labelledby="photo-dialog-title">
+  <div class="heading small">
+    <h2 id="photo-dialog-title">Foto da OS</h2>
+    <button class="button secondary" type="button" data-close-photo>Fechar</button>
+  </div>
+  <img class="photo-dialog-image" alt="">
+  {% if current_user.role == 'admin' %}
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="version" value="{{ order.version }}">
+    <div class="form-grid">
+      <div class="field">
+        <label for="edit-photo-stage">Etapa</label>
+        <select id="edit-photo-stage" class="input" name="stage">
+          {% for value, label in photo_form.stage.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="edit-photo-caption">Descrição</label>
+        <input id="edit-photo-caption" class="input" name="caption" maxlength="200">
+      </div>
+      {% if photos_enabled %}
+      <div class="field wide">
+        <label for="edit-photo-file">Substituir foto (opcional)</label>
+        <input id="edit-photo-file" class="input" name="file" type="file" accept="image/jpeg,image/png,image/webp">
+      </div>
+      {% endif %}
+    </div>
+    <button class="button" type="submit">Salvar foto</button>
+  </form>
+  {% endif %}
+</dialog>
 <div id="history-panel" role="tabpanel" aria-labelledby="tab-history" data-panel hidden><h2>Histórico do atendimento</h2>{% for e in order.events %}<div class="history-row"><div>{{ e.description }}</div><div class="muted">{{ e.user.name }} · {{ e.created_at|localtime }}</div></div>{% endfor %}</div></section>{% endblock %}
