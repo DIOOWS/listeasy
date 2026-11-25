@@ -31,7 +31,11 @@
     <figcaption>Foto principal do veículo</figcaption>
   </figure>
   {% endif %}
-  <h4>Serviços e peças</h4>
+  <div class="tv-services-heading"><h4>Serviços e peças</h4>
+    {% if current_user.role == 'admin' %}
+    <a class="tv-checklist-print" href="{{ url_for('web.order_mechanic_checklist',ident=order.id) }}" target="_blank" rel="noopener" aria-label="Imprimir checklist dos serviços da OS {{ order.number }}">Imprimir checklist / PDF</a>
+    {% endif %}
+  </div>
   {% for item in order.items %}
     <div class="tv-detail-text"><strong>{{ item.description }}</strong>{% if item.kind == 'servico' %} · {{ 'Concluído' if item.done else 'Pendente' }}{% endif %}</div>
     {% if item.responsible|default('', true)|trim %}<p class="tv-detail-text">Responsável: {{ item.responsible }}</p>{% endif %}

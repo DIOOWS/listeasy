@@ -997,6 +997,16 @@ def report_export():
     output=io.BytesIO();book.save(output);output.seek(0)
     return send_file(output,as_attachment=True,download_name=f'relatorio-servicos-{today()}.xlsx',mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
+@web.get('/ordens/<int:ident>/checklist-oficina')
+@admin_required
+def order_mechanic_checklist(ident):
+    order = get_order(ident, options=[db.joinedload(Order.vehicle),
+        db.joinedload(Order.client), selectinload(Order.items)])
+    return render_template('mechanic_checklist.html', order=order,
+        services=[item for item in order.items if item.kind == 'servico'],
+        parts=[item for item in order.items if item.kind == 'peca'])
+
+
 @web.get('/ordens/<int:ident>/imprimir')
 @login_required
 def order_print(ident):

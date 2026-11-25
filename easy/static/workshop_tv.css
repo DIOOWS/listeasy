@@ -293,3 +293,9 @@ main{padding-top:.65rem;padding-bottom:.65rem}
   font-size: .75rem;
   overflow-wrap: anywhere;
 }
+
+/* Admin-only paper checklist action in expanded service details. */
+.tv-services-heading{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:.65rem 0 .5rem}
+.tv-detail-columns .tv-services-heading h4{margin:0}
+.tv-checklist-print{display:inline-flex;align-items:center;justify-content:center;min-height:2.25rem;padding:.4rem .65rem;border:1px solid #abc7e0;border-radius:.35rem;background:#eef5fc;color:#153d63;font:inherit;font-size:.78rem;font-weight:700;text-decoration:none;white-space:nowrap}
+.tv-checklist-print:hover{background:#dceefe}.tv-checklist-print:focus-visible{outline:3px solid #1684c5;outline-offset:3px}
