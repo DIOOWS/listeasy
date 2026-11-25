@@ -7,3 +7,13 @@
 .sheet-header .sheet-vehicle-photo img{display:block;width:36mm;height:24mm;max-height:none;object-fit:contain;background:#f6f7f8;border:1px solid #d4dae1;border-radius:3px;margin:0}
 .sheet-vehicle-photo figcaption{font-size:8px;line-height:1.3;color:#555;margin-top:3px}
 @media screen and (max-width:650px){.sheet-header .sheet-vehicle-photo{width:29mm;padding-left:3mm}.sheet-header .sheet-vehicle-photo img{width:26mm;height:20mm}.sheet-header h1{font-size:17px}}
+
+/* Individual activities are real table rows so long lists can paginate. */
+.service-parts-label{font-size:10px;font-weight:700;margin:7px 0 0}
+.services-checklist .service-task-row td{padding:7px 9px}
+.services-checklist .service-context-row td{padding:3px 9px}
+.service-task-row{break-inside:avoid;page-break-inside:avoid}
+.paper-task-checkbox{display:inline-block;width:4.5mm;height:4.5mm;border:1.2px solid #111;background:#fff;vertical-align:top;margin-top:1px}
+.service-task-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:10px;line-height:1.4}
+.service-context-row .service-task-text{font-size:10px;color:#333}
+.task-write-line{height:15px;border-bottom:1px solid #a9b1b9}

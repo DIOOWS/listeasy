@@ -1,14 +1,34 @@
+{% macro task_lines(text) -%}
+{% set state=namespace(rows=[]) %}
+{% for raw in text.splitlines() %}
+  {% set line=raw.strip() %}
+  {% set dot=line.partition('. ') %}{% set bracket=line.partition(') ') %}
+  {% set bullet=line[:1] in ['-','•','*','–','—'] %}
+  {% set numbered=(dot[1] and dot[0].isdigit()) or (bracket[1] and bracket[0].isdigit()) %}
+  {% if line and (bullet or numbered) %}
+    {% set content=line.lstrip('-•*–— \t') if bullet else dot[2] if dot[1] and dot[0].isdigit() else bracket[2] %}
+    {% if content.strip() %}{% set _=state.rows.append({'task':true,'text':content}) %}{% endif %}
+  {% elif line %}
+    {% if state.rows and state.rows[-1].task %}{% set _=state.rows[-1].update({'text':state.rows[-1].text ~ '\n' ~ raw}) %}
+    {% else %}{% set _=state.rows.append({'task':false,'text':raw}) %}{% endif %}
+  {% endif %}
+{% endfor %}
+{% for row in state.rows %}
+<tr class="{{ 'service-task-row' if row.task else 'service-context-row' }}"><td class="check-cell">{% if row.task %}<span class="paper-task-checkbox" aria-label="Conferência manual desta atividade"></span>{% endif %}</td><td><div class="service-task-text">{{ row.text }}</div></td><td class="mechanic-cell">{% if row.task %}<div class="task-write-line"></div>{% endif %}</td></tr>
+{% endfor %}
+{%- endmacro %}
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Checklist da oficina - {{ order.number }}</title><link rel="stylesheet" href="{{ url_for('static',filename='mechanic_checklist.css',v=2) }}"><script src="{{ url_for('static',filename='mechanic_checklist.js',v=1) }}" defer></script></head>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Checklist da oficina - {{ order.number }}</title><link rel="stylesheet" href="{{ url_for('static',filename='mechanic_checklist.css',v=3) }}"><script src="{{ url_for('static',filename='mechanic_checklist.js',v=1) }}" defer></script></head>
 <body><div class="print-toolbar"><span>Confira a folha e escolha imprimir ou salvar como PDF.</span><button type="button" data-print-mechanic>Imprimir / Salvar PDF</button></div>
 <main class="paper">
 <header class="sheet-header"><img src="{{ url_for('static',filename='logo.png') }}" alt="Easy Assistência 24h"><div><p class="sheet-eyebrow">OFICINA</p><h1>Checklist de serviços</h1><p class="sheet-order">{{ order.number if order.number.startswith('OS') else 'OS ' ~ order.number }}</p></div>{% if order.cover_key %}<figure class="sheet-vehicle-photo"><img data-checklist-cover src="{{ url_for('web.order_cover',ident=order.id,v=order.cover_key) }}" alt="Foto de {{ order.model or order.plate or 'veículo' }}" loading="eager"><figcaption>Capa do veículo</figcaption></figure>{% endif %}</header>
 <table class="order-facts"><tbody><tr><td><span>Cliente</span><strong>{{ order.client.name }}</strong></td><td><span>Veículo</span><strong>{{ order.model or 'Não informado' }}</strong></td></tr><tr><td><span>Placa / identificação</span><strong>{{ order.plate or 'Não informada' }}</strong></td><td><span>Frota / quilometragem</span>{{ order.fleet or 'Não informada' }} / {{ (order.mileage|string ~ ' km') if order.mileage is not none else 'Não informada' }}</td></tr><tr><td><span>Entrada / previsão de entrega</span>{{ order.entry_date|datebr if order.entry_date else 'Não informada' }} / {{ order.due_date|datebr if order.due_date else 'Sem previsão' }}</td><td><span>Responsável pelo atendimento</span>{{ order.responsible or 'Não informado' }}</td></tr></tbody></table>
 {% if order.problem %}<section class="work-note"><h2>Solicitação / problema relatado</h2><p>{{ order.problem }}</p></section>{% endif %}
 {% if order.diagnosis %}<section class="work-note"><h2>Diagnóstico</h2><p>{{ order.diagnosis }}</p></section>{% endif %}
-<h2 class="services-title">Conferência dos serviços</h2><p class="sheet-instruction">Marque o quadrado somente depois de executar e conferir o serviço.</p>
+<h2 class="services-title">Conferência dos serviços</h2><p class="sheet-instruction">Marque cada atividade depois de executar e conferir. A marcação ao lado do título confirma o serviço completo.</p>
 <table class="services-checklist"><thead><tr><th class="check-column">Feito</th><th>Serviço e orientações<span class="table-os">{{ order.number if order.number.startswith('OS') else 'OS ' ~ order.number }}</span></th><th class="mechanic-column">Mecânico / data</th></tr></thead><tbody>
-{% for item in services %}<tr class="service-check-row"><td class="check-cell"><span class="paper-checkbox" aria-label="Marcação manual em branco"></span></td><td><strong class="service-title">{{ loop.index }}. {{ item.description }}</strong>{% if item.responsible %}<p class="service-person">Responsável previsto: {{ item.responsible }}</p>{% endif %}{% if item.used_parts %}<p class="service-parts"><b>Peças / orientações:</b><br>{{ item.used_parts }}</p>{% endif %}</td><td class="mechanic-cell"><div class="write-line"></div><div class="date-line">____ / ____ / ________</div></td></tr>
+{% for item in services %}<tr class="service-check-row"><td class="check-cell"><span class="paper-checkbox" aria-label="Marcação manual em branco"></span></td><td><strong class="service-title">{{ loop.index }}. {{ item.description }}</strong>{% if item.responsible %}<p class="service-person">Responsável previsto: {{ item.responsible }}</p>{% endif %}{% if item.used_parts %}<p class="service-parts-label">Peças / orientações e atividades:</p>{% endif %}</td><td class="mechanic-cell"><div class="write-line"></div><div class="date-line">____ / ____ / ________</div></td></tr>
+{% if item.used_parts %}{{ task_lines(item.used_parts) }}{% endif %}
 {% else %}<tr><td class="check-cell"><span class="paper-checkbox" aria-label="Marcação manual em branco"></span></td><td><strong>Nenhum serviço cadastrado nesta OS.</strong><p>Descreva abaixo o serviço a executar.</p><div class="write-line"></div><div class="write-line"></div></td><td class="mechanic-cell"><div class="write-line"></div><div class="date-line">____ / ____ / ________</div></td></tr>{% endfor %}
 </tbody></table>
 {% if parts %}<section class="parts-note"><h2>Materiais cadastrados na OS</h2><ul>{% for item in parts %}<li>{{ item.description }} - quantidade: {{ item.quantity|string|replace('.',',') }}</li>{% endfor %}</ul></section>{% endif %}
