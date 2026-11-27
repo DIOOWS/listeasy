@@ -3,8 +3,10 @@
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="version">
-    <div class="field"><label for="flow-step-action">Marcação</label><select class="input" id="flow-step-action" name="action"><option value="save">Registrar data</option><option value="clear">Neutro / apagar marcação</option></select></div>
+    <div class="field"><label for="flow-step-action">Marcação</label><select class="input" id="flow-step-action" name="action"><option value="save">Registrar data e horário</option><option value="clear">Neutro / apagar marcação</option></select></div>
     <div class="field"><label for="flow-step-date">Data</label><input class="input" id="flow-step-date" type="date" name="date" data-today="{{ today.isoformat() }}" required></div>
+    <div class="field"><label for="flow-step-time">Horário (opcional)</label><input class="input" id="flow-step-time" type="time" name="time" step="1" aria-describedby="flow-time-help"></div>
+    <p class="muted" id="flow-time-help">Horário de Brasília. Em branco: mantém o horário existente ou usa o atual em uma etapa nova.</p>
     <p class="muted">A alteração vale somente para esta bolinha.</p>
     <button class="button" type="submit">Salvar etapa</button>
   </form>

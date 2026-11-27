@@ -185,6 +185,7 @@
   if(control.id==='flow-step-action'){
    const date=control.form.elements.date;
    date.disabled=control.value==='clear';date.required=!date.disabled;
+   const time=control.form.elements.time;if(time)time.disabled=date.disabled;
   }
   if(control.matches('[data-show-password]')){const input=control.closest('form').querySelector('input[name=password]');if(input)input.type=control.checked?'text':'password';}
   const form=control.closest('form');if(form)form.dataset.dirty='true';
@@ -203,6 +204,7 @@
    form.elements.version.value=target.dataset.version;
    const date=form.elements.date;date.disabled=false;date.required=true;
    date.value=target.dataset.date||date.dataset.today;
+   const time=form.elements.time;if(time){time.disabled=false;time.value=target.dataset.time||'';}
    flowDialog.querySelector('h2').textContent=target.dataset.label;
    flowDialog.showModal();return;
   }

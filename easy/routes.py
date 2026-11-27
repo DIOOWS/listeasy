@@ -457,10 +457,23 @@ def clear_later_movements(order, target):
     return removed
 
 
-def save_exact_status(order, target, day):
+def workshop_timestamp(day, chosen_time=None, previous=None):
+    """Resolve a workshop-local date/time to the existing naive UTC convention."""
+    local = (previous or utcnow()).replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
+    effective = datetime.combine(day, chosen_time or local.time(), tzinfo=WORKSHOP_ZONE)
+    stamp = effective.astimezone(timezone.utc).replace(tzinfo=None)
+    # Historical DST dates can contain nonexistent local times.
+    restored = stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
+    if restored.replace(tzinfo=None) != effective.replace(tzinfo=None):
+        abort(400, description='Esse horário não existe nessa data no horário de Brasília.')
+    return stamp
+
+
+def save_exact_status(order, target, day, chosen_time=None):
     previous = order.status
-    stamp = utcnow()
     movement = STATUS_MOVEMENTS.get(target)
+    previous_stamp = getattr(order, movement + '_at') if movement else order.status_changed_at
+    stamp = workshop_timestamp(day, chosen_time, previous_stamp)
     # Cancellation is independent of the operational timeline.
     removed = []  # Updating one status must preserve independent milestones.
     if target not in ('Faturado', 'Recebido'):
@@ -470,11 +483,14 @@ def save_exact_status(order, target, day):
         setattr(order, movement + '_at', stamp)
         order.status_changed_at = stamp
     else:
-        local_stamp = stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
-        effective_stamp = datetime.combine(day, local_stamp.time(), tzinfo=WORKSHOP_ZONE)
-        order.status_changed_at = effective_stamp.astimezone(timezone.utc).replace(tzinfo=None)
+        order.status_changed_at = stamp
     message = (f'Financeiro: {target}. Data: {day:%d/%m/%Y}.' if target in ('Faturado', 'Recebido')
                else f'Fluxo atualizado: {previous} → {target}. Data do status: {day:%d/%m/%Y}.')
+    local_stamp = stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
+    message += f' Horário: {local_stamp:%H:%M:%S} (Brasília).'
+    if previous_stamp:
+        old_local = previous_stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
+        message += f' Registro anterior: {old_local:%d/%m/%Y %H:%M:%S}.'
     if removed:
         message += ' Etapas limpas: ' + ', '.join(removed) + '.'
     event(order, message)
@@ -512,8 +528,11 @@ def render_order(order, data_form=None, cover_form=None, edit_forms=None):
     order_choices(data_form, order)
     if related:
         data_form.client_id.choices = [choice for choice in data_form.client_id.choices if choice[0] == order.client_id]
+    movement = STATUS_MOVEMENTS.get(order.workshop_status)
+    status_stamp = (getattr(order, movement + '_at') if movement else None) or order.status_changed_at
+    status_time = status_stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE).time() if status_stamp else None
     status_form = StatusForm(formdata=None, status=order.workshop_status,
-        status_date=order.flow_status_date or today(), version=str(order.version))
+        status_date=order.flow_status_date or today(), status_time=status_time, version=str(order.version))
     status_form.status.choices = [(x, x) for x in STATUSES if x not in ('Faturado', 'Recebido')]
     forms = {}
     for item in order.items:
@@ -661,12 +680,11 @@ def order_step(ident, step):
     order = get_order(ident)
     form = FlowStepForm()
     if not form.validate_on_submit() or (form.action.data == 'save' and not form.date.data):
-        abort(400, description='Selecione uma data válida ou a opção Neutro.')
+        abort(400, description='Confira a data e o horário (00:00 a 23:59:59), ou selecione Neutro.')
     mutable(order)
     label, date_field, time_field, status = FLOW_STEPS[step]
     old_day = getattr(order, date_field)
-    # Match the requested date while preserving an existing recorded local time.
-    stamp = getattr(order, time_field) or utcnow()
+    old_stamp = getattr(order, time_field)
     if form.action.data == 'clear':
         setattr(order, date_field, None)
         setattr(order, time_field, None)
@@ -675,11 +693,11 @@ def order_step(ident, step):
         # Entry date is also used by the order's existing date constraint.
         if step == 'entry' and order.due_date and form.date.data > order.due_date:
             abort(400, description='A entrada não pode ser posterior ao prazo de entrega.')
-        local = stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
-        effective = datetime.combine(form.date.data, local.time(), tzinfo=WORKSHOP_ZONE)
+        stamp = workshop_timestamp(form.date.data, form.time.data, old_stamp)
         setattr(order, date_field, form.date.data)
-        setattr(order, time_field, effective.astimezone(timezone.utc).replace(tzinfo=None))
-        message = f'Etapa {label}: data definida para {form.date.data:%d/%m/%Y}.'
+        setattr(order, time_field, stamp)
+        local = stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
+        message = f'Etapa {label}: data definida para {form.date.data:%d/%m/%Y}. Horário: {local:%H:%M:%S} (Brasília).'
     if status or order.status in ('Faturado', 'Recebido'):
         # Operational progress depends on marked workshop steps, never finance.
         remaining = [(target, getattr(order, time))
@@ -689,6 +707,9 @@ def order_step(ident, step):
         order.status_changed_at = (remaining[-1][1] if remaining else None) or utcnow()
     if old_day:
         message += f' Data anterior: {old_day:%d/%m/%Y}.'
+    if old_stamp:
+        old_local = old_stamp.replace(tzinfo=timezone.utc).astimezone(WORKSHOP_ZONE)
+        message += f' Registro anterior: {old_local:%d/%m/%Y %H:%M:%S}.'
     event(order, message)
     db.session.commit()
     flash('Etapa atualizada.', 'success')
@@ -724,7 +745,7 @@ def order_status(ident):
         if not form.status_date.data:
             flash('Selecione a data do status.', 'error')
             return redirect(url_for('web.order_detail', ident=ident))
-        save_exact_status(order, target, form.status_date.data)
+        save_exact_status(order, target, form.status_date.data, form.status_time.data)
     else:
         day=form.delivered_date.data if target=='Entregue' else None
         record_status(order,target,day)

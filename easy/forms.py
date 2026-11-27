@@ -1,7 +1,7 @@
 from decimal import Decimal
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired
-from wtforms import StringField, PasswordField, TextAreaField, SelectField, DateField, IntegerField, DecimalField, BooleanField, HiddenField
+from wtforms import StringField, PasswordField, TextAreaField, SelectField, DateField, TimeField, IntegerField, DecimalField, BooleanField, HiddenField
 from wtforms.validators import DataRequired, InputRequired, Length, NumberRange, Optional, Regexp
 
 from .media import optimize_upload
@@ -62,8 +62,9 @@ class ServiceForm(FlaskForm):
     version = HiddenField()
 
 class FlowStepForm(FlaskForm):
-    action = SelectField('Marcação', choices=[('save', 'Registrar data'), ('clear', 'Neutro / apagar marcação')])
+    action = SelectField('Marcação', choices=[('save', 'Registrar data e horário'), ('clear', 'Neutro / apagar marcação')])
     date = DateField('Data', validators=[Optional()])
+    time = TimeField('Horário (opcional)', format=['%H:%M:%S', '%H:%M'], validators=[Optional()], render_kw={'step': '1'})
     version = HiddenField()
 
 class FinalizedForm(FlaskForm):
@@ -73,6 +74,7 @@ class FinalizedForm(FlaskForm):
 class StatusForm(FlaskForm):
     status = SelectField('Status')
     status_date = DateField('Data do status', validators=[Optional()], render_kw={'required': True})
+    status_time = TimeField('Horário do status (opcional)', format=['%H:%M:%S', '%H:%M'], validators=[Optional()], render_kw={'step': '1'})
     delivered_date = DateField('Data real da entrega (vazio = hoje)', validators=[Optional()])
     version = HiddenField()
 
