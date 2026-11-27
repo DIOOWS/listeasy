@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% from 'macros.html' import pagination with context %}{% block content %}
+{% extends 'base.html' %}{% from 'macros.html' import pagination with context %}{% block page_styles %}<link rel="stylesheet" href="{{ url_for('static',filename='dashboard-cards.css',v='29') }}">{% endblock %}{% block content %}
 <div class="page-kicker">Início / Painel</div>
 <div class="heading"><div><h1>Painel da oficina</h1><p class="muted">{{ today|datebr }} · acompanhe os atendimentos do dia</p></div><div class="actions"><a class="button secondary" href="{{ url_for('web.workshop_tv') }}" target="_blank" rel="noopener">▣ Modo TV</a><a class="button" href="{{ url_for('web.order_new') }}">+ Nova OS</a></div></div>
 <div class="overview-metrics">
@@ -9,7 +9,7 @@
 {% for key,label,count in [('', 'Todos',counts.open),('late','Em atraso',counts.late),('today','Entrega hoje',counts.today),('ready','Prontos',counts.ready)] %}<a class="filter-chip {{ 'selected' if view==key }}" href="{{ url_for('web.dashboard',view=key,q=q) }}" {% if view==key %}aria-current="page"{% endif %}>{{ label }} ({{ count }})</a>{% endfor %}</div>
 <form method="get" class="dashboard-search" role="search"><input type="hidden" name="view" value="{{ view }}"><label class="flow-sr" for="dashboard-q">Buscar OS, placa ou cliente</label><input class="input" id="dashboard-q" name="q" value="{{ q }}" placeholder="Buscar OS, placa ou cliente"><button class="button secondary" type="submit">Buscar</button></form></div>
 <div class="heading small"><h2>Veículos em atendimento</h2><a href="{{ url_for('web.orders') }}">Ver todas as OS →</a></div>
-<div class="workshop-cards">{% for order in orders %}
+<div class="workshop-cards" id="dashboard-vehicles">{% for order in orders %}
 {% set services=order.items|selectattr('kind','equalto','servico')|list %}
 {% set staff=services|selectattr('responsible')|map(attribute='responsible')|unique|list %}
 <article class="workshop-card tone-{{ order.status_tone }}">

@@ -1,7 +1,7 @@
 'use strict';
 // Somente arquivos públicos. Nunca armazena OS, fotos, login ou respostas da API.
-const CACHE = 'easy-servicos-static-v28';
-const ASSETS = ['/static/workspace.css?v=compact-cards-28','/static/app.css?v=unified-os-26','/static/app.js?v=flow-time-27','/static/icon-192.png','/static/icon-512.png','/static/icon-maskable-512.png','/static/offline.html','/static/logo.png','/static/apple-touch-icon.png','/static/favicon.ico'];
+const CACHE = 'easy-servicos-static-v29';
+const ASSETS = ['/static/dashboard-cards.css?v=29','/static/workspace.css?v=compact-cards-29','/static/app.css?v=unified-os-26','/static/app.js?v=flow-time-27','/static/icon-192.png','/static/icon-512.png','/static/icon-maskable-512.png','/static/offline.html','/static/logo.png','/static/apple-touch-icon.png','/static/favicon.ico'];
 const STATIC_PATHS=ASSETS.map(path=>new URL(path,self.location.origin).pathname);
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('easy-servicos-static-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});

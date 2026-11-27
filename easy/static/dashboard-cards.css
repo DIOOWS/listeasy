@@ -1,0 +1,23 @@
+/* Dashboard only. Dedicated asset prevents reuse of the old card layout. */
+@media screen {
+#dashboard-vehicles {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:stretch}
+#dashboard-vehicles .workshop-card {display:flex;padding:8px;gap:9px;min-height:0;border-radius:9px}
+#dashboard-vehicles .card-cover {width:64px;max-width:none;height:96px;min-height:0;align-self:center;flex-shrink:0;object-fit:cover;border-radius:6px}
+#dashboard-vehicles .card-placeholder svg {width:40px;margin-bottom:4px}
+#dashboard-vehicles .card-placeholder span {font-size:9px}
+#dashboard-vehicles .workshop-card-body {min-width:0;flex:1}
+#dashboard-vehicles .card-heading {align-items:baseline;flex-wrap:nowrap;gap:5px}
+#dashboard-vehicles .card-heading h3 {font-size:18px;line-height:1.2;letter-spacing:-.2px;margin:0}
+#dashboard-vehicles .card-heading>span {font-size:9px;white-space:nowrap}
+#dashboard-vehicles p {font-size:11px;line-height:1.35;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#dashboard-vehicles .card-bottom {gap:5px;margin-top:5px;flex-wrap:wrap}
+#dashboard-vehicles .status-pill {font-size:10px;padding:3px 5px}
+#dashboard-vehicles .small-button {min-height:28px;padding:4px 6px;font-size:10px}
+#dashboard-vehicles p.card-deadline {font-size:10px!important;margin-top:4px!important;line-height:1.35}
+}
+@media screen and (min-width:1100px) {#dashboard-vehicles {grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media screen and (min-width:1700px) {#dashboard-vehicles {grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media screen and (max-width:680px) {
+#dashboard-vehicles {grid-template-columns:minmax(0,1fr)}
+#dashboard-vehicles .small-button {min-height:36px;padding:5px 10px;font-size:11px}
+}
