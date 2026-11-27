@@ -8,3 +8,28 @@ body.workspace{--brand:#0072c6;--soft:#eaf5ff;--ink:#17212e;--muted:#657487;--bg
 @media(max-width:570px){.workspace .heading{gap:14px}.workspace .heading>.actions{gap:8px}.workspace .heading>.actions .button{font-size:12px;padding:7px 11px;min-height:36px}.overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-metric{gap:12px;padding:15px}.metric-icon{display:grid;width:36px;height:36px}.overview-metric strong{font-size:29px}.overview-metric span:not(.metric-icon){font-size:11px}.dashboard-toolbar{gap:13px}.dashboard-search{max-width:none;flex-basis:100%}.quick-filters{gap:6px}.filter-chip{padding:5px 9px;font-size:11px}.workshop-cards{grid-template-columns:minmax(0,1fr);gap:13px}.workshop-card{min-height:168px;padding:12px}.card-cover{width:100px;max-width:28%}.card-heading{flex-wrap:nowrap}.card-heading h3{font-size:22px}.workshop-card p{font-size:11px}.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-grid>.field:first-child{grid-column:1/-1}.workspace .form-grid{grid-template-columns:minmax(0,1fr)}.workspace .filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.order-media-sidebar{grid-template-columns:minmax(0,1fr)}.workspace .panel{padding:17px}.workspace .tabs{gap:0}.workspace .tab{font-size:12px;padding:11px 10px}.workspace .photo-grid{grid-template-columns:minmax(0,1fr)}.workspace .photo-grid img{height:210px}.workspace #photo-dialog .photo-dialog-image{height:280px}.workspace .flow-with-finalization .order-flow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 12px}.workspace .flow-with-finalization .flow-step{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px}.workspace .flow-with-finalization .flow-step::after{display:none}.workspace .flow-with-finalization .flow-time{font-size:10px}.finalization-form{justify-content:space-between}.workspace .order-heading .actions{width:100%}.workspace .order-heading .actions .status-pill{margin-left:auto}.workspace .order-heading h1{font-size:32px}}
 
 @media print{.workspace .top,.workspace .nav,.workspace .mobile-nav,.workspace>footer{display:none!important}.workspace main.container{margin:0!important;padding:0!important;max-width:none!important;min-height:0!important}.workspace .print-os{border:0;padding:0}.workspace .print-os .badge{color:#111;background:#fff;border:1px solid #999}.workspace dialog{display:none!important}}
+
+/* Compact dashboard cards: same information and status colors, more vehicles. */
+@media screen{
+ .workspace .workshop-cards{gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .workspace .workshop-card{padding:8px;gap:9px;min-height:0;border-radius:9px}
+ .workspace .workshop-card .card-cover{width:70px;max-width:none;height:100px;min-height:0;align-self:center;border-radius:6px}
+ .workspace .workshop-card .card-placeholder svg{width:45px;margin-bottom:4px}
+ .workspace .workshop-card .card-placeholder span{font-size:9px}
+ .workspace .workshop-card .card-heading{align-items:baseline;flex-wrap:nowrap;gap:5px}
+ .workspace .workshop-card .card-heading h3{font-size:18px;line-height:1.2;letter-spacing:-.2px;margin:0}
+ .workspace .workshop-card .card-heading>span{font-size:9px;white-space:nowrap}
+ .workspace .workshop-card p{font-size:11px;line-height:1.35;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .workspace .workshop-card .card-bottom{gap:6px;margin-top:5px}
+ .workspace .workshop-card .status-pill{font-size:9.5px;padding:4px 6px}
+ .workspace .workshop-card .small-button{min-height:30px;padding:4px 8px;font-size:10px}
+ .workspace .workshop-card p.card-deadline{font-size:10px!important;margin-top:4px!important;line-height:1.35}
+}
+@media screen and (min-width:1280px){.workspace .workshop-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media screen and (min-width:1900px){.workspace .workshop-cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media screen and (max-width:680px){
+ .workspace .workshop-cards{grid-template-columns:minmax(0,1fr)}
+ .workspace .workshop-card .card-cover{width:66px;height:96px}
+ .workspace .workshop-card .small-button{min-height:36px;padding:5px 10px;font-size:11px}
+ .workspace .workshop-card .status-pill{font-size:10px}
+}

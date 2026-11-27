@@ -165,7 +165,7 @@ def dashboard():
     query = db.select(Order).join(Client).outerjoin(Vehicle).where(condition).options(
         db.joinedload(Order.vehicle), db.joinedload(Order.client), selectinload(Order.items))
     page = db.paginate(query.order_by(Order.due_date.asc().nulls_last(), Order.id),
-                       per_page=12, error_out=False, count=False)
+                       per_page=24, error_out=False, count=False)
     page.total = totals[4]
     return render_template('dashboard.html', orders=page.items, page=page, counts=counts, view=view, q=q)
 
